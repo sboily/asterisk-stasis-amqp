@@ -14,7 +14,7 @@ CONFNAME = $(basename $(SAMPLENAME))
 
 TARGET = res_stasis_amqp.so
 OBJECTS = res_stasis_amqp.o
-CFLAGS += -I.
+CFLAGS += -I../asterisk-amqp
 CFLAGS += -DHAVE_STDINT_H=1
 CFLAGS += -Wall -Wextra -Wno-unused-parameter -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Winit-self -Wmissing-format-attribute \
           -Wformat=2 -g -fPIC -D_GNU_SOURCE -D'AST_MODULE="res_stasis_amqp"' -D'AST_MODULE_SELF_SYM=__internal_res_stasis_amqp_self'

@@ -39,11 +39,38 @@
 #include "asterisk/stasis_message_router.h"
 #include "asterisk/time.h"
 
+#include "asterisk/amqp.h"
+
+
 /*! Regular Stasis subscription */
 static struct stasis_subscription *sub;
 
 /*! Stasis message router */
 static struct stasis_message_router *router;
+
+static int setup_amqp(void);
+
+
+static int setup_amqp(void)
+{
+	struct stasis_amqp_conf *conf = aco_pending_config(&cfg_info);
+	if (!conf) {
+		return 0;
+	}
+	if (!conf->global) {
+		ast_log(LOG_ERROR, "Invalid stasis_amqp.conf\n");
+		return -1;
+	}
+	/* Refresh the AMQP connection */
+	ao2_cleanup(conf->global->amqp);
+	conf->global->amqp = ast_amqp_get_connection(conf->global->connection);
+	if (!conf->global->amqp) {
+		ast_log(LOG_ERROR, "Could not get AMQP connection %s\n",
+			conf->global->connection);
+		return -1;
+	}
+	return 0;
+}
 
 /*!
  * \brief Subscription callback for all channel messages.
@@ -159,6 +186,8 @@ static int unload_module(void)
 
 static int load_module(void)
 {
+	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
+
 	/* You can create a message router to route messages by type */
 	router = stasis_message_router_create(
 		ast_channel_topic_all_cached());
