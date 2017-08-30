@@ -71,7 +71,9 @@
 #include "asterisk.h"
 
 #include "asterisk/module.h"
+#include "asterisk/stasis.h"
 #include "asterisk/stasis_channels.h"
+#include "asterisk/stasis_app.h"
 #include "asterisk/stasis_message_router.h"
 #include "asterisk/ari.h"
 #include "asterisk/time.h"
@@ -255,9 +257,9 @@ static void default_route(void *data, struct stasis_subscription *sub,
 }
 
 /*!
- * \brief CDR handler for AMQP.
+ * \brief Channel handler for AMQP.
  *
- * \param cdr CDR to log.
+ * \param message to Log.
  * \return 0 on success.
  * \return -1 on error.
  */
@@ -279,13 +281,12 @@ static int stasis_amqp_log(struct stasis_message *message)
 
         str = ast_json_dump_string_format(stasis_message_to_json(message, NULL), ast_ari_json_format());
         if (str == NULL) {
-		ast_log(LOG_ERROR, "Failed to encode JSON object\n");
 		return -1;
         }
 
 	res = ast_amqp_basic_publish(conf->global->amqp,
 		amqp_cstring_bytes(conf->global->exchange),
-		amqp_cstring_bytes(conf->global->queue),
+		amqp_cstring_bytes("stasis.channel"),
 		0, /* mandatory; don't return unsendable messages */
 		0, /* immediate; allow messages to be queued */
 		&props,
@@ -327,8 +328,50 @@ static int unload_module(void)
 	return 0;
 }
 
+static void stasis_app_message_handler(void *data, const char *app_name, struct ast_json *message)
+{
+        RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
+        RAII_VAR(char *, str, NULL, ast_json_free);
+        int res;
+
+        amqp_basic_properties_t props = {
+                ._flags = AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CONTENT_TYPE_FLAG,
+                .delivery_mode = 2, /* persistent delivery mode */
+                .content_type = amqp_cstring_bytes("application/json")
+        };
+
+        conf = ao2_global_obj_ref(confs);
+
+        ast_assert(conf && conf->global && conf->global->amqp);
+
+        str = ast_json_dump_string_format(message, ast_ari_json_format());
+        if (str == NULL) {
+                ast_log(LOG_ERROR, "ARI: Failed to encode JSON object\n");
+                return;
+        }
+
+        res = ast_amqp_basic_publish(conf->global->amqp,
+                amqp_cstring_bytes(conf->global->exchange),
+                amqp_cstring_bytes("stasis.app"),
+                0, /* mandatory; don't return unsendable messages */
+                0, /* immediate; allow messages to be queued */
+                &props,
+                amqp_cstring_bytes(str));
+
+        if (res != 0) {
+                ast_log(LOG_ERROR, "ARI: Error publishing stasis to AMQP\n");
+                return;
+        }
+        return;
+
+}
+
 static int load_module(void)
 {
+        struct ao2_container *apps;
+        struct ao2_iterator it_apps;
+        char *app;
+
         RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
 
@@ -363,6 +406,21 @@ static int load_module(void)
 
 	/* Or a subscription to receive all of the messages from a topic */
 	sub = stasis_subscribe(ast_channel_topic_all(), send_message_to_amqp, NULL);
+
+        apps = stasis_app_get_all();
+        if (!apps) {
+                ast_log(LOG_ERROR, "Unable to retrieve registered applications!\n");
+                return AST_MODULE_LOAD_DECLINE;
+        }
+
+        it_apps = ao2_iterator_init(apps, 0);
+        while ((app = ao2_iterator_next(&it_apps))) {
+	        stasis_app_register_all(app, &stasis_app_message_handler, NULL);
+                ao2_ref(app, -1);
+        }
+        ao2_iterator_destroy(&it_apps);
+        ao2_ref(apps, -1);
+
 	if (!sub) {
 		unload_module();
 		return AST_MODULE_LOAD_DECLINE;
