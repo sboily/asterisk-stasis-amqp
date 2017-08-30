@@ -38,9 +38,12 @@
 #include "asterisk/stasis_channels.h"
 #include "asterisk/stasis_message_router.h"
 #include "asterisk/time.h"
+#include "asterisk/config_options.h"
+
 
 #include "asterisk/amqp.h"
 
+#define CONF_FILENAME "stasis_amqp.conf"
 
 /*! Regular Stasis subscription */
 static struct stasis_subscription *sub;
@@ -48,7 +51,96 @@ static struct stasis_subscription *sub;
 /*! Stasis message router */
 static struct stasis_message_router *router;
 
+/*! \brief stasis_amqp configuration */
+struct stasis_amqp_conf {
+	struct stasis_amqp_global_conf *global;
+};
+
+/*! \brief global config structure */
+struct stasis_amqp_global_conf {
+	AST_DECLARE_STRING_FIELDS(
+		/*! \brief connection name */
+		AST_STRING_FIELD(connection);
+		/*! \brief queue name */
+		AST_STRING_FIELD(queue);
+		/*! \brief exchange name */
+		AST_STRING_FIELD(exchange);
+	);
+	/*! \brief current connection to amqp */
+	struct ast_amqp_connection *amqp;
+};
+
+/*! \brief Locking container for safe configuration access. */
+static AO2_GLOBAL_OBJ_STATIC(confs);
+
+static struct aco_type global_option = {
+	.type = ACO_GLOBAL,
+	.name = "global",
+	.item_offset = offsetof(struct stasis_amqp_conf, global),
+	.category = "^global$",
+	.category_match = ACO_WHITELIST,
+};
+
+static struct aco_type *global_options[] = ACO_TYPES(&global_option);
+
+static void conf_global_dtor(void *obj)
+{
+	struct stasis_amqp_global_conf *global = obj;
+	ao2_cleanup(global->amqp);
+	ast_string_field_free_memory(global);
+}
+
+static struct stasis_amqp_global_conf *conf_global_create(void)
+{
+	RAII_VAR(struct stasis_amqp_global_conf *, global, NULL, ao2_cleanup);
+	global = ao2_alloc(sizeof(*global), conf_global_dtor);
+	if (!global) {
+		return NULL;
+	}
+	if (ast_string_field_init(global, 64) != 0) {
+		return NULL;
+	}
+	aco_set_defaults(&global_option, "global", global);
+	return ao2_bump(global);
+}
+
 static int setup_amqp(void);
+
+
+/*! \brief The conf file that's processed for the module. */
+static struct aco_file conf_file = {
+	/*! The config file name. */
+	.filename = CONF_FILENAME,
+	/*! The mapping object types to be processed. */
+	.types = ACO_TYPES(&global_option),
+};
+
+static void conf_dtor(void *obj)
+{
+	struct stasis_amqp_conf *conf = obj;
+	ao2_cleanup(conf->global);
+}
+
+
+static void *conf_alloc(void)
+{
+	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
+	conf = ao2_alloc_options(sizeof(*conf), conf_dtor,
+		AO2_ALLOC_OPT_LOCK_NOLOCK);
+	if (!conf) {
+		return NULL;
+	}
+	conf->global = conf_global_create();
+	if (!conf->global) {
+		return NULL;
+	}
+	return ao2_bump(conf);
+}
+
+CONFIG_INFO_STANDARD(cfg_info, confs, conf_alloc,
+	.files = ACO_FILES(&conf_file),
+	.pre_apply_config = setup_amqp,
+);
 
 
 static int setup_amqp(void)
@@ -141,12 +233,12 @@ static void updates(void *data, struct stasis_subscription *sub,
 		/* Cache entry removed. Compute the age of the channel and post
 		 * that, as well as decrementing the channel count.
 		 */
-		struct ast_channel_snapshot *last;
-		int64_t age;
+		/*struct ast_channel_snapshot *last;*/
+		/* int64_t age;*/
 
-		last = stasis_message_data(update->old_snapshot);
-		age = ast_tvdiff_ms(*stasis_message_timestamp(message),
-			last->creationtime);
+		/*last = stasis_message_data(update->old_snapshot);*/
+		/*age = ast_tvdiff_ms(*stasis_message_timestamp(message),
+			last->creationtime);*/
 		/*ast_statsd_log("channels.calltime", AST_STATSD_TIMER, age);*/
 
 		/* And decrement the channel count */
@@ -186,6 +278,7 @@ static int unload_module(void)
 
 static int load_module(void)
 {
+        RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
 
 	/* You can create a message router to route messages by type */
