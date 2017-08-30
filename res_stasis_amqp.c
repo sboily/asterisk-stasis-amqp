@@ -32,11 +32,48 @@
 	<support_level>extended</support_level>
  ***/
 
+/*** DOCUMENTATION
+	<configInfo name="res_stasis_amqp" language="en_US">
+		<synopsis>Stasis to AMQP Backend</synopsis>
+		<configFile name="stasis_amqp.conf">
+			<configObject name="global">
+				<synopsis>Global configuration settings</synopsis>
+				<configOption name="loguniqueid">
+					<synopsis>Determines whether to log the uniqueid for calls</synopsis>
+					<description>
+						<para>Default is no.</para>
+					</description>
+				</configOption>
+				<configOption name="connection">
+					<synopsis>Name of the connection from amqp.conf to use</synopsis>
+					<description>
+						<para>Specifies the name of the connection from amqp.conf to use</para>
+					</description>
+				</configOption>
+				<configOption name="queue">
+					<synopsis>Name of the queue to post to</synopsis>
+					<description>
+						<para>Defaults to asterisk_stasis</para>
+					</description>
+				</configOption>
+				<configOption name="exchange">
+					<synopsis>Name of the exchange to post to</synopsis>
+					<description>
+						<para>Defaults to empty string</para>
+					</description>
+				</configOption>
+			</configObject>
+		</configFile>
+	</configInfo>
+ ***/
+
+
 #include "asterisk.h"
 
 #include "asterisk/module.h"
 #include "asterisk/stasis_channels.h"
 #include "asterisk/stasis_message_router.h"
+#include "asterisk/ari.h"
 #include "asterisk/time.h"
 #include "asterisk/config_options.h"
 
@@ -50,6 +87,11 @@ static struct stasis_subscription *sub;
 
 /*! Stasis message router */
 static struct stasis_message_router *router;
+
+
+static int setup_amqp(void);
+static int stasis_amqp_log(struct stasis_message *message);
+
 
 /*! \brief stasis_amqp configuration */
 struct stasis_amqp_conf {
@@ -103,8 +145,6 @@ static struct stasis_amqp_global_conf *conf_global_create(void)
 	aco_set_defaults(&global_option, "global", global);
 	return ao2_bump(global);
 }
-
-static int setup_amqp(void);
 
 
 /*! \brief The conf file that's processed for the module. */
@@ -176,7 +216,7 @@ static int setup_amqp(void)
 static void send_message_to_amqp(void *data, struct stasis_subscription *sub,
 	struct stasis_message *message)
 {
-	RAII_VAR(struct ast_str *, metric, NULL, ast_free);
+
 
 	if (stasis_subscription_final_message(sub, message)) {
 		/* Normally, data points to an object that must be cleaned up.
@@ -187,64 +227,11 @@ static void send_message_to_amqp(void *data, struct stasis_subscription *sub,
 		return;
 	}
 
-	/* For no good reason, count message types */
-	metric = ast_str_create(80);
-	if (metric) {
-		ast_str_set(&metric, 0, "stasis.message.%s",
-			stasis_message_type_name(stasis_message_type(message)));
-		//ast_statsd_log(ast_str_buffer(metric), AST_STATSD_METER, 1);
-	}
+        
+        stasis_amqp_log(message);
+
 }
 
-/*!
- * \brief Router callback for \ref stasis_cache_update messages.
- * \param data Data pointer given when added to router.
- * \param sub This subscription.
- * \param topic The topic the message was posted to. This is not necessarily the
- *              topic you subscribed to, since messages may be forwarded between
- *              topics.
- * \param message The message itself.
- */
-static void updates(void *data, struct stasis_subscription *sub,
-	struct stasis_message *message)
-{
-	/* Since this came from a message router, we know the type of the
-	 * message. We can cast the data without checking its type.
-	 */
-	struct stasis_cache_update *update = stasis_message_data(message);
-
-	/* We're only interested in channel snapshots, so check the type
-	 * of the underlying message.
-	 */
-	if (ast_channel_snapshot_type() != update->type) {
-		return;
-	}
-
-	/* There are three types of cache updates.
-	 * !old && new -> Initial cache entry
-	 * old && new -> Updated cache entry
-	 * old && !new -> Cache entry removed.
-	 */
-
-	if (!update->old_snapshot && update->new_snapshot) {
-		/* Initial cache entry; count a channel creation */
-		/*ast_statsd_log_string("channels.count", AST_STATSD_GAUGE, "+1", 1.0);*/
-	} else if (update->old_snapshot && !update->new_snapshot) {
-		/* Cache entry removed. Compute the age of the channel and post
-		 * that, as well as decrementing the channel count.
-		 */
-		/*struct ast_channel_snapshot *last;*/
-		/* int64_t age;*/
-
-		/*last = stasis_message_data(update->old_snapshot);*/
-		/*age = ast_tvdiff_ms(*stasis_message_timestamp(message),
-			last->creationtime);*/
-		/*ast_statsd_log("channels.calltime", AST_STATSD_TIMER, age);*/
-
-		/* And decrement the channel count */
-		/* ast_statsd_log_string("channels.count", AST_STATSD_GAUGE, "-1", 1.0);*/
-	}
-}
 
 /*!
  * \brief Router callback for any message that doesn't otherwise have a route.
@@ -267,6 +254,70 @@ static void default_route(void *data, struct stasis_subscription *sub,
 	}
 }
 
+/*!
+ * \brief CDR handler for AMQP.
+ *
+ * \param cdr CDR to log.
+ * \return 0 on success.
+ * \return -1 on error.
+ */
+static int stasis_amqp_log(struct stasis_message *message)
+{
+	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
+	RAII_VAR(char *, str, NULL, ast_json_free);
+	int res;
+
+	amqp_basic_properties_t props = {
+		._flags = AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CONTENT_TYPE_FLAG,
+		.delivery_mode = 2, /* persistent delivery mode */
+		.content_type = amqp_cstring_bytes("application/json")
+	};
+
+	conf = ao2_global_obj_ref(confs);
+
+	ast_assert(conf && conf->global && conf->global->amqp);
+
+        str = ast_json_dump_string_format(stasis_message_to_json(message, NULL), ast_ari_json_format());
+        if (str == NULL) {
+		ast_log(LOG_ERROR, "Failed to encode JSON object\n");
+		return -1;
+        }
+
+	res = ast_amqp_basic_publish(conf->global->amqp,
+		amqp_cstring_bytes(conf->global->exchange),
+		amqp_cstring_bytes(conf->global->queue),
+		0, /* mandatory; don't return unsendable messages */
+		0, /* immediate; allow messages to be queued */
+		&props,
+		amqp_cstring_bytes(str));
+
+	if (res != 0) {
+		ast_log(LOG_ERROR, "Error publishing stasis to AMQP\n");
+		return -1;
+	}
+	return 0;
+}
+
+
+static int load_config(int reload)
+{
+	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
+	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
+	switch (aco_process_config(&cfg_info, reload)) {
+	case ACO_PROCESS_ERROR:
+		return -1;
+	case ACO_PROCESS_OK:
+	case ACO_PROCESS_UNCHANGED:
+		break;
+	}
+	conf = ao2_global_obj_ref(confs);
+	if (!conf || !conf->global) {
+		ast_log(LOG_ERROR, "Error obtaining config from stasis_amqp.conf\n");
+		return -1;
+	}
+	return 0;
+}
+
 static int unload_module(void)
 {
 	stasis_unsubscribe_and_join(sub);
@@ -281,14 +332,33 @@ static int load_module(void)
         RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
 
+	if (aco_info_init(&cfg_info) != 0) {
+		ast_log(LOG_ERROR, "Failed to initialize config");
+		aco_info_destroy(&cfg_info);
+		return -1;
+	}
+
+	aco_option_register(&cfg_info, "connection", ACO_EXACT,
+		global_options, "", OPT_STRINGFIELD_T, 0,
+		STRFLDSET(struct stasis_amqp_global_conf, connection));
+	aco_option_register(&cfg_info, "queue", ACO_EXACT,
+		global_options, "asterisk_stasis", OPT_STRINGFIELD_T, 0,
+		STRFLDSET(struct stasis_amqp_global_conf, queue));
+	aco_option_register(&cfg_info, "exchange", ACO_EXACT,
+		global_options, "", OPT_STRINGFIELD_T, 0,
+		STRFLDSET(struct stasis_amqp_global_conf, exchange));
+
+	if (load_config(0) != 0) {
+		ast_log(LOG_WARNING, "Configuration failed to load\n");
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
 	/* You can create a message router to route messages by type */
 	router = stasis_message_router_create(
 		ast_channel_topic_all_cached());
 	if (!router) {
 		return AST_MODULE_LOAD_DECLINE;
 	}
-	stasis_message_router_add(router, stasis_cache_update_type(),
-		updates, NULL);
 	stasis_message_router_set_default(router, default_route, NULL);
 
 	/* Or a subscription to receive all of the messages from a topic */
