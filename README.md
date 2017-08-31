@@ -13,3 +13,9 @@ Please restart asterisk before loading res_stasis_amqp.so for the documentation.
 To load module
 
     CLI> module load res_stasis_amqp.so
+
+Events is push for:
+
+* channel in routing key stasis.channel
+* ari apps in routing key stasis.app
+* ami in routing key stasis.ami
