@@ -93,6 +93,7 @@ static struct stasis_subscription *manager;
 
 static int setup_amqp(void);
 static int stasis_amqp_log(struct stasis_message *message);
+static int publish_to_amqp(char *topic, char *json_msg);
 
 
 /*! \brief stasis_amqp configuration */
@@ -222,7 +223,6 @@ static void send_message_to_amqp(void *data, struct stasis_subscription *sub,
 		return;
 	}
 
-        ast_log(LOG_ERROR, "%s\n", stasis_message_type_name(stasis_message_type(message)));
         stasis_amqp_log(message);
 
 }
@@ -237,10 +237,33 @@ static void send_message_to_amqp(void *data, struct stasis_subscription *sub,
  */
 static int stasis_amqp_log(struct stasis_message *message)
 {
-	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
-	RAII_VAR(char *, str, NULL, ast_json_free);
-	int res;
+	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
+        RAII_VAR(struct ast_json *, manager_json, NULL, ast_json_unref);
+
         struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
+
+        if (manager_blob) {
+         	manager_json = ast_json_pack("{s:s, s:s}", manager_blob->manager_event, manager_blob->manager_event, "payload", manager_blob->extra_fields);
+         	if (manager_json) {
+          		publish_to_amqp("stasis.ami", ast_json_dump_string(manager_json));
+        	}
+        }
+
+        /*ast_log(LOG_ERROR, "%s\n", stasis_message_type_name(stasis_message_type(message)));*/
+        stasis_msg = ast_json_dump_string_format(stasis_message_to_json(message, NULL), ast_ari_json_format());
+        if (stasis_msg) {
+        	publish_to_amqp("stasis.channel", stasis_msg);
+        }
+
+	return -1;
+
+}
+
+static int publish_to_amqp(char *topic, char *json_msg)
+{
+
+	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
+	int res;
 
 	amqp_basic_properties_t props = {
 		._flags = AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CONTENT_TYPE_FLAG,
@@ -252,29 +275,19 @@ static int stasis_amqp_log(struct stasis_message *message)
 
 	ast_assert(conf && conf->global && conf->global->amqp);
 
-        if (manager_blob) {
-          ast_log(LOG_ERROR, "MANAGER: %s\n", manager_blob->manager_event);
-          ast_log(LOG_ERROR, "MANAGER: %s\n", manager_blob->extra_fields);
-        }
-
-        ast_log(LOG_ERROR, "%s\n", stasis_message_type_name(stasis_message_type(message)));
-        str = ast_json_dump_string_format(stasis_message_to_json(message, NULL), ast_ari_json_format());
-        if (str == NULL) {
-		return -1;
-        }
-
 	res = ast_amqp_basic_publish(conf->global->amqp,
 		amqp_cstring_bytes(conf->global->exchange),
-		amqp_cstring_bytes("stasis.channel"),
+		amqp_cstring_bytes(topic),
 		0, /* mandatory; don't return unsendable messages */
 		0, /* immediate; allow messages to be queued */
 		&props,
-		amqp_cstring_bytes(str));
+		amqp_cstring_bytes(json_msg));
 
 	if (res != 0) {
 		ast_log(LOG_ERROR, "Error publishing stasis to AMQP\n");
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -309,19 +322,7 @@ static int unload_module(void)
 
 static void stasis_app_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
-        RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
         RAII_VAR(char *, str, NULL, ast_json_free);
-        int res;
-
-        amqp_basic_properties_t props = {
-                ._flags = AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CONTENT_TYPE_FLAG,
-                .delivery_mode = 2, /* persistent delivery mode */
-                .content_type = amqp_cstring_bytes("application/json")
-        };
-
-        conf = ao2_global_obj_ref(confs);
-
-        ast_assert(conf && conf->global && conf->global->amqp);
 
         str = ast_json_dump_string_format(message, ast_ari_json_format());
         if (str == NULL) {
@@ -329,18 +330,8 @@ static void stasis_app_message_handler(void *data, const char *app_name, struct 
                 return;
         }
 
-        res = ast_amqp_basic_publish(conf->global->amqp,
-                amqp_cstring_bytes(conf->global->exchange),
-                amqp_cstring_bytes("stasis.app"),
-                0, /* mandatory; don't return unsendable messages */
-                0, /* immediate; allow messages to be queued */
-                &props,
-                amqp_cstring_bytes(str));
+        publish_to_amqp("stasis.app", str);
 
-        if (res != 0) {
-                ast_log(LOG_ERROR, "ARI: Error publishing stasis to AMQP\n");
-                return;
-        }
         return;
 
 }
