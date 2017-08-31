@@ -75,9 +75,11 @@
 #include "asterisk/stasis_channels.h"
 #include "asterisk/stasis_app.h"
 #include "asterisk/stasis_message_router.h"
+#include "asterisk/stasis_bridges.h"
 #include "asterisk/ari.h"
 #include "asterisk/time.h"
 #include "asterisk/config_options.h"
+#include "asterisk/manager.h"
 
 
 #include "asterisk/amqp.h"
@@ -86,9 +88,7 @@
 
 /*! Regular Stasis subscription */
 static struct stasis_subscription *sub;
-
-/*! Stasis message router */
-static struct stasis_message_router *router;
+static struct stasis_subscription *manager;
 
 
 static int setup_amqp(void);
@@ -218,43 +218,15 @@ static int setup_amqp(void)
 static void send_message_to_amqp(void *data, struct stasis_subscription *sub,
 	struct stasis_message *message)
 {
-
-
 	if (stasis_subscription_final_message(sub, message)) {
-		/* Normally, data points to an object that must be cleaned up.
-		 * The final message is an unsubscribe notification that's
-		 * guaranteed to be the last message this subscription receives.
-		 * This would be a safe place to kick off any needed cleanup.
-		 */
 		return;
 	}
 
-        
+        ast_log(LOG_ERROR, "%s\n", stasis_message_type_name(stasis_message_type(message)));
         stasis_amqp_log(message);
 
 }
 
-
-/*!
- * \brief Router callback for any message that doesn't otherwise have a route.
- * \param data Data pointer given when added to router.
- * \param sub This subscription.
- * \param topic The topic the message was posted to. This is not necessarily the
- *              topic you subscribed to, since messages may be forwarded between
- *              topics.
- * \param message The message itself.
- */
-static void default_route(void *data, struct stasis_subscription *sub,
-	struct stasis_message *message)
-{
-	if (stasis_subscription_final_message(sub, message)) {
-		/* Much like with the regular subscription, you may need to
-		 * perform some cleanup when done with a message router. You
-		 * can look for the final message in the default route.
-		 */
-		return;
-	}
-}
 
 /*!
  * \brief Channel handler for AMQP.
@@ -268,6 +240,7 @@ static int stasis_amqp_log(struct stasis_message *message)
 	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(char *, str, NULL, ast_json_free);
 	int res;
+        struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
 
 	amqp_basic_properties_t props = {
 		._flags = AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CONTENT_TYPE_FLAG,
@@ -279,6 +252,12 @@ static int stasis_amqp_log(struct stasis_message *message)
 
 	ast_assert(conf && conf->global && conf->global->amqp);
 
+        if (manager_blob) {
+          ast_log(LOG_ERROR, "MANAGER: %s\n", manager_blob->manager_event);
+          ast_log(LOG_ERROR, "MANAGER: %s\n", manager_blob->extra_fields);
+        }
+
+        ast_log(LOG_ERROR, "%s\n", stasis_message_type_name(stasis_message_type(message)));
         str = ast_json_dump_string_format(stasis_message_to_json(message, NULL), ast_ari_json_format());
         if (str == NULL) {
 		return -1;
@@ -322,9 +301,9 @@ static int load_config(int reload)
 static int unload_module(void)
 {
 	stasis_unsubscribe_and_join(sub);
+	stasis_unsubscribe_and_join(manager);
 	sub = NULL;
-	stasis_message_router_unsubscribe_and_join(router);
-	router = NULL;
+        manager = NULL;
 	return 0;
 }
 
@@ -396,17 +375,13 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	/* You can create a message router to route messages by type */
-	router = stasis_message_router_create(
-		ast_channel_topic_all_cached());
-	if (!router) {
-		return AST_MODULE_LOAD_DECLINE;
-	}
-	stasis_message_router_set_default(router, default_route, NULL);
+	/* Subscription to receive all of the messages from manager topic */
+        manager = stasis_subscribe(ast_manager_get_topic(), send_message_to_amqp, NULL);
 
-	/* Or a subscription to receive all of the messages from a topic */
+	/* Subscription to receive all of the messages from channel topic */
 	sub = stasis_subscribe(ast_channel_topic_all(), send_message_to_amqp, NULL);
 
+	/* Subscription to receive all of the messages from ari applications registered */
         apps = stasis_app_get_all();
         if (!apps) {
                 ast_log(LOG_ERROR, "Unable to retrieve registered applications!\n");
@@ -428,7 +403,7 @@ static int load_module(void)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Send all Stasis message to a message bus",
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Send all Stasis messages to AMQP",
 	.support_level = AST_MODULE_SUPPORT_EXTENDED,
 	.load = load_module,
 	.unload = unload_module,
