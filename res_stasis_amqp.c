@@ -294,8 +294,28 @@ static int publish_to_amqp(char *topic, char *json_msg)
 
 static int load_config(int reload)
 {
-	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
+
+
+        RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
+
+	if (aco_info_init(&cfg_info) != 0) {
+		ast_log(LOG_ERROR, "Failed to initialize config");
+		aco_info_destroy(&cfg_info);
+		return -1;
+	}
+
+	aco_option_register(&cfg_info, "connection", ACO_EXACT,
+		global_options, "", OPT_STRINGFIELD_T, 0,
+		STRFLDSET(struct stasis_amqp_global_conf, connection));
+	aco_option_register(&cfg_info, "queue", ACO_EXACT,
+		global_options, "asterisk_stasis", OPT_STRINGFIELD_T, 0,
+		STRFLDSET(struct stasis_amqp_global_conf, queue));
+	aco_option_register(&cfg_info, "exchange", ACO_EXACT,
+		global_options, "", OPT_STRINGFIELD_T, 0,
+		STRFLDSET(struct stasis_amqp_global_conf, exchange));
+
+
 	switch (aco_process_config(&cfg_info, reload)) {
 	case ACO_PROCESS_ERROR:
 		return -1;
@@ -342,24 +362,12 @@ static int load_module(void)
         struct ao2_iterator it_apps;
         char *app;
 
-        RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
-	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
-
-	if (aco_info_init(&cfg_info) != 0) {
-		ast_log(LOG_ERROR, "Failed to initialize config");
-		aco_info_destroy(&cfg_info);
-		return -1;
+	if (!ast_module_check("res_amqp.so")) {
+		if (ast_load_resource("res_amqp.so") != AST_MODULE_LOAD_SUCCESS) {
+			ast_log(LOG_ERROR, "Cannot load res_amqp, so res_stasis_amqp cannot be loaded\n");
+			return AST_MODULE_LOAD_DECLINE;
+		}
 	}
-
-	aco_option_register(&cfg_info, "connection", ACO_EXACT,
-		global_options, "", OPT_STRINGFIELD_T, 0,
-		STRFLDSET(struct stasis_amqp_global_conf, connection));
-	aco_option_register(&cfg_info, "queue", ACO_EXACT,
-		global_options, "asterisk_stasis", OPT_STRINGFIELD_T, 0,
-		STRFLDSET(struct stasis_amqp_global_conf, queue));
-	aco_option_register(&cfg_info, "exchange", ACO_EXACT,
-		global_options, "", OPT_STRINGFIELD_T, 0,
-		STRFLDSET(struct stasis_amqp_global_conf, exchange));
 
 	if (load_config(0) != 0) {
 		ast_log(LOG_WARNING, "Configuration failed to load\n");
