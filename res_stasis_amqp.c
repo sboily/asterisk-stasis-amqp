@@ -296,7 +296,7 @@ static int load_config(int reload)
 {
 
 
-        RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
+	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
 
 	if (aco_info_init(&cfg_info) != 0) {
@@ -336,31 +336,30 @@ static int unload_module(void)
 	stasis_unsubscribe_and_join(sub);
 	stasis_unsubscribe_and_join(manager);
 	sub = NULL;
-        manager = NULL;
+	manager = NULL;
 	return 0;
 }
 
 static void stasis_app_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
-        RAII_VAR(char *, str, NULL, ast_json_free);
+	RAII_VAR(char *, str, NULL, ast_json_free);
 
-        str = ast_json_dump_string_format(message, ast_ari_json_format());
-        if (str == NULL) {
-                ast_log(LOG_ERROR, "ARI: Failed to encode JSON object\n");
-                return;
-        }
+	str = ast_json_dump_string_format(message, ast_ari_json_format());
+	if (str == NULL) {
+		ast_log(LOG_ERROR, "ARI: Failed to encode JSON object\n");
+		return;
+	}
 
-        publish_to_amqp("stasis.app", str);
+	publish_to_amqp("stasis.app", str);
 
-        return;
-
+	return;
 }
 
 static int load_module(void)
 {
-        struct ao2_container *apps;
-        struct ao2_iterator it_apps;
-        char *app;
+	struct ao2_container *apps;
+	struct ao2_iterator it_apps;
+	char *app;
 
 	if (!ast_module_check("res_amqp.so")) {
 		if (ast_load_resource("res_amqp.so") != AST_MODULE_LOAD_SUCCESS) {
@@ -375,25 +374,25 @@ static int load_module(void)
 	}
 
 	/* Subscription to receive all of the messages from manager topic */
-        manager = stasis_subscribe(ast_manager_get_topic(), send_message_to_amqp, NULL);
+	manager = stasis_subscribe(ast_manager_get_topic(), send_message_to_amqp, NULL);
 
 	/* Subscription to receive all of the messages from channel topic */
 	sub = stasis_subscribe(ast_channel_topic_all(), send_message_to_amqp, NULL);
 
 	/* Subscription to receive all of the messages from ari applications registered */
-        apps = stasis_app_get_all();
-        if (!apps) {
-                ast_log(LOG_ERROR, "Unable to retrieve registered applications!\n");
-                return AST_MODULE_LOAD_DECLINE;
-        }
+	apps = stasis_app_get_all();
+	if (!apps) {
+		ast_log(LOG_ERROR, "Unable to retrieve registered applications!\n");
+		return AST_MODULE_LOAD_DECLINE;
+	}
 
-        it_apps = ao2_iterator_init(apps, 0);
-        while ((app = ao2_iterator_next(&it_apps))) {
-	        stasis_app_register_all(app, &stasis_app_message_handler, NULL);
-                ao2_ref(app, -1);
-        }
-        ao2_iterator_destroy(&it_apps);
-        ao2_ref(apps, -1);
+	it_apps = ao2_iterator_init(apps, 0);
+	while ((app = ao2_iterator_next(&it_apps))) {
+		stasis_app_register_all(app, &stasis_app_message_handler, NULL);
+			ao2_ref(app, -1);
+	}
+	ao2_iterator_destroy(&it_apps);
+	ao2_ref(apps, -1);
 
 	if (!sub) {
 		unload_module();
