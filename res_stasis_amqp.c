@@ -87,6 +87,7 @@
 #include "asterisk/amqp.h"
 
 #define CONF_FILENAME "stasis_amqp.conf"
+#define ROUTING_KEY_LEN 256
 
 /*! Regular Stasis subscription */
 static struct stasis_subscription *sub;
@@ -278,6 +279,9 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 {
 	RAII_VAR(struct ast_json *, json, NULL, ast_json_unref);
 	RAII_VAR(struct ast_json *, event_name, NULL, ast_json_unref);
+	const char *routing_key_prefix = "stasis.ami";
+	char routing_key[ROUTING_KEY_LEN];
+	char *ptr = NULL;
 	int res = 0;
 
 	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
@@ -308,7 +312,24 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 		return;
 	}
 
-	publish_to_amqp("stasis.ami", ast_json_dump_string(json));
+	RAII_VAR(char *, lowered_event_name, NULL, ast_free);
+	lowered_event_name = ast_strdup(manager_blob->manager_event);
+	if (!lowered_event_name) {
+		ast_log(LOG_ERROR, "failed to copy the AMI event name\n");
+		return;
+	}
+
+	for (ptr = lowered_event_name; *ptr != '\0'; ptr++) {
+		*ptr = tolower(*ptr);
+	}
+
+	res = snprintf(routing_key, ROUTING_KEY_LEN, "%s.%s", routing_key_prefix, lowered_event_name);
+	if (!res) {
+		ast_log(LOG_ERROR, "failed to format a routing key for an AMI event: %s\n", manager_blob->manager_event);
+		return;
+	}
+
+	publish_to_amqp(routing_key, ast_json_dump_string(json));
 }
 
 /*!
