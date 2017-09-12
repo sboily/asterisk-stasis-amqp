@@ -80,6 +80,8 @@
 #include "asterisk/time.h"
 #include "asterisk/config_options.h"
 #include "asterisk/manager.h"
+#include "asterisk/json.h"
+#include "asterisk/utils.h"
 
 
 #include "asterisk/amqp.h"
@@ -227,6 +229,41 @@ static void send_channel_event_to_amqp(void *data, struct stasis_subscription *s
 
 }
 
+static int ami_add_extra_fields_to_json(struct ast_json *json, char *fields)
+{
+	struct ast_json *json_value = NULL;
+	char *line = NULL;
+	char *word = NULL;
+	char *key, *value;
+	int res = 0;
+
+	while ((line = strsep(&fields, "\r\n")) != NULL) {
+		key = NULL;
+		value = NULL;
+
+		while ((word = strsep(&line, ": ")) != NULL) {
+			if (!key) {
+				key = word;
+			} else {
+				value = word;
+			}
+		}
+
+		json_value = ast_json_string_create(value);
+		if (!json_value) {
+			continue;
+		}
+
+		res = ast_json_object_set(json, key, json_value);
+		if (res) {
+			ast_log(LOG_DEBUG, "failed to set json value %s: %s\n", key, value);
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
 /*!
  * \brief Subscription callback for all AMI messages.
  * \param data Data pointer given when creating the subscription.
@@ -239,24 +276,39 @@ static void send_channel_event_to_amqp(void *data, struct stasis_subscription *s
 static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 									struct stasis_message *message)
 {
-	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
-	RAII_VAR(struct ast_json *, manager_json, NULL, ast_json_unref);
+	RAII_VAR(struct ast_json *, json, NULL, ast_json_unref);
+	RAII_VAR(struct ast_json *, event_name, NULL, ast_json_unref);
+	int res = 0;
 
 	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
+	json = ast_json_object_create();
+
 	if (!manager_blob) {
-	return;
-	}
-
-	manager_json = ast_json_pack(
-		"{s:s, s:s}",
-		"event_name", manager_blob->manager_event,
-		"payload", manager_blob->extra_fields);
-
-	if (!manager_json) {
 		return;
 	}
 
-	publish_to_amqp("stasis.ami", ast_json_dump_string(manager_json));
+	if (!json) {
+		return;
+	}
+
+	event_name = ast_json_string_create(manager_blob->manager_event);
+
+	RAII_VAR(char *, fields, NULL, ast_free);
+	fields = ast_strdup(manager_blob->extra_fields);
+
+	res = ami_add_extra_fields_to_json(json, fields);
+	if (res) {
+		ast_log(LOG_ERROR, "failed to create AMI message json payload for %s\n", manager_blob->extra_fields);
+		return;
+	}
+
+	res = ast_json_object_set(json, "Event", event_name);
+	if (res) {
+		ast_log(LOG_ERROR, "failed to set the event name on the json AMI event: %s\n", manager_blob->manager_event);
+		return;
+	}
+
+	publish_to_amqp("stasis.ami", ast_json_dump_string(json));
 }
 
 /*!
