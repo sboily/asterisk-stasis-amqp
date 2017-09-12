@@ -92,7 +92,8 @@ static struct stasis_subscription *manager;
 
 
 static int setup_amqp(void);
-static int stasis_amqp_log(struct stasis_message *message);
+static int stasis_amqp_ami_log(struct stasis_message *message);
+static int stasis_amqp_channel_log(struct stasis_message *message);
 static int publish_to_amqp(char *topic, char *json_msg);
 
 
@@ -216,14 +217,30 @@ static int setup_amqp(void)
  *              topics.
  * \param message The message itself.
  */
-static void send_message_to_amqp(void *data, struct stasis_subscription *sub,
+static void send_channel_event_to_amqp(void *data, struct stasis_subscription *sub,
 	struct stasis_message *message)
 {
 	if (stasis_subscription_final_message(sub, message)) {
 		return;
 	}
 
-	stasis_amqp_log(message);
+	stasis_amqp_channel_log(message);
+
+}
+
+/*!
+ * \brief Subscription callback for all AMI messages.
+ * \param data Data pointer given when creating the subscription.
+ * \param sub This subscription.
+ * \param topic The topic the message was posted to. This is not necessarily the
+ *              topic you subscribed to, since messages may be forwarded between
+ *              topics.
+ * \param message The message itself.
+ */
+static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
+                                   struct stasis_message *message)
+{
+	stasis_amqp_ami_log(message);
 
 }
 
@@ -235,19 +252,9 @@ static void send_message_to_amqp(void *data, struct stasis_subscription *sub,
  * \return 0 on success.
  * \return -1 on error.
  */
-static int stasis_amqp_log(struct stasis_message *message)
+static int stasis_amqp_channel_log(struct stasis_message *message)
 {
 	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
-	RAII_VAR(struct ast_json *, manager_json, NULL, ast_json_unref);
-
-	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
-
-	if (manager_blob) {
-		manager_json = ast_json_pack("{s:s, s:s}", "event_name", manager_blob->manager_event, "payload", manager_blob->extra_fields);
-		if (manager_json) {
-			publish_to_amqp("stasis.ami", ast_json_dump_string(manager_json));
-		}
-	}
 
 	/*ast_log(LOG_ERROR, "%s\n", stasis_message_type_name(stasis_message_type(message)));*/
 	stasis_msg = ast_json_dump_string_format(stasis_message_to_json(message, NULL), ast_ari_json_format());
@@ -256,7 +263,35 @@ static int stasis_amqp_log(struct stasis_message *message)
 	}
 
 	return -1;
+}
 
+/*!
+ * \brief AMI handler for AMQP.
+ *
+ * \param message to Log.
+ * \return 0 on success.
+ * \return -1 on error.
+ */
+static int stasis_amqp_ami_log(struct stasis_message *message)
+{
+	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
+	RAII_VAR(struct ast_json *, manager_json, NULL, ast_json_unref);
+
+	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
+  if (!manager_blob) {
+    return -1;
+  }
+
+  manager_json = ast_json_pack("{s:s, s:s}",
+                               "event_name", manager_blob->manager_event,
+                               "payload", manager_blob->extra_fields);
+  if (!manager_json) {
+    return -1;
+  }
+
+  publish_to_amqp("stasis.ami", ast_json_dump_string(manager_json));
+
+	return 0;
 }
 
 static int publish_to_amqp(char *topic, char *json_msg)
@@ -374,10 +409,10 @@ static int load_module(void)
 	}
 
 	/* Subscription to receive all of the messages from manager topic */
-	manager = stasis_subscribe(ast_manager_get_topic(), send_message_to_amqp, NULL);
+	manager = stasis_subscribe(ast_manager_get_topic(), send_ami_event_to_amqp, NULL);
 
 	/* Subscription to receive all of the messages from channel topic */
-	sub = stasis_subscribe(ast_channel_topic_all(), send_message_to_amqp, NULL);
+	sub = stasis_subscribe(ast_channel_topic_all(), send_channel_event_to_amqp, NULL);
 
 	/* Subscription to receive all of the messages from ari applications registered */
 	apps = stasis_app_get_all();
