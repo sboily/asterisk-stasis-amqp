@@ -92,7 +92,6 @@ static struct stasis_subscription *manager;
 
 
 static int setup_amqp(void);
-static int stasis_amqp_ami_log(struct stasis_message *message);
 static int stasis_amqp_channel_log(struct stasis_message *message);
 static int publish_to_amqp(char *topic, char *json_msg);
 
@@ -238,12 +237,27 @@ static void send_channel_event_to_amqp(void *data, struct stasis_subscription *s
  * \param message The message itself.
  */
 static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
-                                   struct stasis_message *message)
+									struct stasis_message *message)
 {
-	stasis_amqp_ami_log(message);
+	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
+	RAII_VAR(struct ast_json *, manager_json, NULL, ast_json_unref);
 
+	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
+	if (!manager_blob) {
+	return;
+	}
+
+	manager_json = ast_json_pack(
+		"{s:s, s:s}",
+		"event_name", manager_blob->manager_event,
+		"payload", manager_blob->extra_fields);
+
+	if (!manager_json) {
+		return;
+	}
+
+	publish_to_amqp("stasis.ami", ast_json_dump_string(manager_json));
 }
-
 
 /*!
  * \brief Channel handler for AMQP.
@@ -263,35 +277,6 @@ static int stasis_amqp_channel_log(struct stasis_message *message)
 	}
 
 	return -1;
-}
-
-/*!
- * \brief AMI handler for AMQP.
- *
- * \param message to Log.
- * \return 0 on success.
- * \return -1 on error.
- */
-static int stasis_amqp_ami_log(struct stasis_message *message)
-{
-	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
-	RAII_VAR(struct ast_json *, manager_json, NULL, ast_json_unref);
-
-	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
-  if (!manager_blob) {
-    return -1;
-  }
-
-  manager_json = ast_json_pack("{s:s, s:s}",
-                               "event_name", manager_blob->manager_event,
-                               "payload", manager_blob->extra_fields);
-  if (!manager_json) {
-    return -1;
-  }
-
-  publish_to_amqp("stasis.ami", ast_json_dump_string(manager_json));
-
-	return 0;
 }
 
 static int publish_to_amqp(char *topic, char *json_msg)
