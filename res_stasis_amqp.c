@@ -80,11 +80,14 @@
 #include "asterisk/time.h"
 #include "asterisk/config_options.h"
 #include "asterisk/manager.h"
+#include "asterisk/json.h"
+#include "asterisk/utils.h"
 
 
 #include "asterisk/amqp.h"
 
 #define CONF_FILENAME "stasis_amqp.conf"
+#define ROUTING_KEY_LEN 256
 
 /*! Regular Stasis subscription */
 static struct stasis_subscription *sub;
@@ -92,7 +95,7 @@ static struct stasis_subscription *manager;
 
 
 static int setup_amqp(void);
-static int stasis_amqp_log(struct stasis_message *message);
+static int stasis_amqp_channel_log(struct stasis_message *message);
 static int publish_to_amqp(char *topic, char *json_msg);
 
 
@@ -216,17 +219,118 @@ static int setup_amqp(void)
  *              topics.
  * \param message The message itself.
  */
-static void send_message_to_amqp(void *data, struct stasis_subscription *sub,
+static void send_channel_event_to_amqp(void *data, struct stasis_subscription *sub,
 	struct stasis_message *message)
 {
 	if (stasis_subscription_final_message(sub, message)) {
 		return;
 	}
 
-	stasis_amqp_log(message);
+	stasis_amqp_channel_log(message);
 
 }
 
+static int ami_add_extra_fields_to_json(struct ast_json *json, char *fields)
+{
+	struct ast_json *json_value = NULL;
+	char *line = NULL;
+	char *word = NULL;
+	char *key, *value;
+	int res = 0;
+
+	while ((line = strsep(&fields, "\r\n")) != NULL) {
+		key = NULL;
+		value = NULL;
+
+		while ((word = strsep(&line, ": ")) != NULL) {
+			if (!key) {
+				key = word;
+			} else {
+				value = word;
+			}
+		}
+
+		json_value = ast_json_string_create(value);
+		if (!json_value) {
+			continue;
+		}
+
+		res = ast_json_object_set(json, key, json_value);
+		if (res) {
+			ast_log(LOG_DEBUG, "failed to set json value %s: %s\n", key, value);
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+/*!
+ * \brief Subscription callback for all AMI messages.
+ * \param data Data pointer given when creating the subscription.
+ * \param sub This subscription.
+ * \param topic The topic the message was posted to. This is not necessarily the
+ *              topic you subscribed to, since messages may be forwarded between
+ *              topics.
+ * \param message The message itself.
+ */
+static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
+									struct stasis_message *message)
+{
+	RAII_VAR(struct ast_json *, json, NULL, ast_json_unref);
+	RAII_VAR(struct ast_json *, event_name, NULL, ast_json_unref);
+	const char *routing_key_prefix = "stasis.ami";
+	char routing_key[ROUTING_KEY_LEN];
+	char *ptr = NULL;
+	int res = 0;
+
+	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
+	json = ast_json_object_create();
+
+	if (!manager_blob) {
+		return;
+	}
+
+	if (!json) {
+		return;
+	}
+
+	event_name = ast_json_string_create(manager_blob->manager_event);
+
+	RAII_VAR(char *, fields, NULL, ast_free);
+	fields = ast_strdup(manager_blob->extra_fields);
+
+	res = ami_add_extra_fields_to_json(json, fields);
+	if (res) {
+		ast_log(LOG_ERROR, "failed to create AMI message json payload for %s\n", manager_blob->extra_fields);
+		return;
+	}
+
+	res = ast_json_object_set(json, "Event", event_name);
+	if (res) {
+		ast_log(LOG_ERROR, "failed to set the event name on the json AMI event: %s\n", manager_blob->manager_event);
+		return;
+	}
+
+	RAII_VAR(char *, lowered_event_name, NULL, ast_free);
+	lowered_event_name = ast_strdup(manager_blob->manager_event);
+	if (!lowered_event_name) {
+		ast_log(LOG_ERROR, "failed to copy the AMI event name\n");
+		return;
+	}
+
+	for (ptr = lowered_event_name; *ptr != '\0'; ptr++) {
+		*ptr = tolower(*ptr);
+	}
+
+	res = snprintf(routing_key, ROUTING_KEY_LEN, "%s.%s", routing_key_prefix, lowered_event_name);
+	if (!res) {
+		ast_log(LOG_ERROR, "failed to format a routing key for an AMI event: %s\n", manager_blob->manager_event);
+		return;
+	}
+
+	publish_to_amqp(routing_key, ast_json_dump_string(json));
+}
 
 /*!
  * \brief Channel handler for AMQP.
@@ -235,19 +339,9 @@ static void send_message_to_amqp(void *data, struct stasis_subscription *sub,
  * \return 0 on success.
  * \return -1 on error.
  */
-static int stasis_amqp_log(struct stasis_message *message)
+static int stasis_amqp_channel_log(struct stasis_message *message)
 {
 	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
-	RAII_VAR(struct ast_json *, manager_json, NULL, ast_json_unref);
-
-	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
-
-	if (manager_blob) {
-		manager_json = ast_json_pack("{s:s, s:s}", "event_name", manager_blob->manager_event, "payload", manager_blob->extra_fields);
-		if (manager_json) {
-			publish_to_amqp("stasis.ami", ast_json_dump_string(manager_json));
-		}
-	}
 
 	/*ast_log(LOG_ERROR, "%s\n", stasis_message_type_name(stasis_message_type(message)));*/
 	stasis_msg = ast_json_dump_string_format(stasis_message_to_json(message, NULL), ast_ari_json_format());
@@ -256,7 +350,6 @@ static int stasis_amqp_log(struct stasis_message *message)
 	}
 
 	return -1;
-
 }
 
 static int publish_to_amqp(char *topic, char *json_msg)
@@ -296,11 +389,11 @@ static int load_config(int reload)
 {
 
 
-        RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
+	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
 
 	if (aco_info_init(&cfg_info) != 0) {
-		ast_log(LOG_ERROR, "Failed to initialize config");
+		ast_log(LOG_ERROR, "Failed to initialize config\n");
 		aco_info_destroy(&cfg_info);
 		return -1;
 	}
@@ -336,31 +429,30 @@ static int unload_module(void)
 	stasis_unsubscribe_and_join(sub);
 	stasis_unsubscribe_and_join(manager);
 	sub = NULL;
-        manager = NULL;
+	manager = NULL;
 	return 0;
 }
 
 static void stasis_app_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
-        RAII_VAR(char *, str, NULL, ast_json_free);
+	RAII_VAR(char *, str, NULL, ast_json_free);
 
-        str = ast_json_dump_string_format(message, ast_ari_json_format());
-        if (str == NULL) {
-                ast_log(LOG_ERROR, "ARI: Failed to encode JSON object\n");
-                return;
-        }
+	str = ast_json_dump_string_format(message, ast_ari_json_format());
+	if (str == NULL) {
+		ast_log(LOG_ERROR, "ARI: Failed to encode JSON object\n");
+		return;
+	}
 
-        publish_to_amqp("stasis.app", str);
+	publish_to_amqp("stasis.app", str);
 
-        return;
-
+	return;
 }
 
 static int load_module(void)
 {
-        struct ao2_container *apps;
-        struct ao2_iterator it_apps;
-        char *app;
+	struct ao2_container *apps;
+	struct ao2_iterator it_apps;
+	char *app;
 
 	if (!ast_module_check("res_amqp.so")) {
 		if (ast_load_resource("res_amqp.so") != AST_MODULE_LOAD_SUCCESS) {
@@ -375,25 +467,25 @@ static int load_module(void)
 	}
 
 	/* Subscription to receive all of the messages from manager topic */
-        manager = stasis_subscribe(ast_manager_get_topic(), send_message_to_amqp, NULL);
+	manager = stasis_subscribe(ast_manager_get_topic(), send_ami_event_to_amqp, NULL);
 
 	/* Subscription to receive all of the messages from channel topic */
-	sub = stasis_subscribe(ast_channel_topic_all(), send_message_to_amqp, NULL);
+	sub = stasis_subscribe(ast_channel_topic_all(), send_channel_event_to_amqp, NULL);
 
 	/* Subscription to receive all of the messages from ari applications registered */
-        apps = stasis_app_get_all();
-        if (!apps) {
-                ast_log(LOG_ERROR, "Unable to retrieve registered applications!\n");
-                return AST_MODULE_LOAD_DECLINE;
-        }
+	apps = stasis_app_get_all();
+	if (!apps) {
+		ast_log(LOG_ERROR, "Unable to retrieve registered applications!\n");
+		return AST_MODULE_LOAD_DECLINE;
+	}
 
-        it_apps = ao2_iterator_init(apps, 0);
-        while ((app = ao2_iterator_next(&it_apps))) {
-	        stasis_app_register_all(app, &stasis_app_message_handler, NULL);
-                ao2_ref(app, -1);
-        }
-        ao2_iterator_destroy(&it_apps);
-        ao2_ref(apps, -1);
+	it_apps = ao2_iterator_init(apps, 0);
+	while ((app = ao2_iterator_next(&it_apps))) {
+		stasis_app_register_all(app, &stasis_app_message_handler, NULL);
+			ao2_ref(app, -1);
+	}
+	ao2_iterator_destroy(&it_apps);
+	ao2_ref(apps, -1);
 
 	if (!sub) {
 		unload_module();
