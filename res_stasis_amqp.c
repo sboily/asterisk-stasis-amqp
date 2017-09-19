@@ -402,6 +402,8 @@ static int stasis_amqp_channel_log(struct stasis_message *message)
 {
 	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, json, NULL, ast_json_free);
+	RAII_VAR(struct ast_json *, channel, NULL, ast_json_free);
+	RAII_VAR(struct ast_json *, unique_id, NULL, ast_json_free);
 	RAII_VAR(char *, routing_key, NULL, free);
 	const char *routing_key_prefix = "stasis.channel";
 
@@ -409,11 +411,20 @@ static int stasis_amqp_channel_log(struct stasis_message *message)
 		return -1;
 	}
 
+	if (!(channel = ast_json_object_get(json, "channel"))) {
+		return -1;
+	}
+
+
+	if (!(unique_id = ast_json_object_get(channel, "id"))) {
+		return -1;
+	}
+
 	if (!(stasis_msg = ast_json_dump_string_format(json, ast_ari_json_format()))) {
 		return -1;
 	}
 
-	if (!(routing_key = new_routing_key(routing_key_prefix, ""))) {
+	if (!(routing_key = new_routing_key(routing_key_prefix, ast_json_string_get(unique_id)))) {
 		return -1;
 	}
 
