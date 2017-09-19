@@ -401,14 +401,25 @@ char *new_routing_key(const char *prefix, const char *suffix)
 static int stasis_amqp_channel_log(struct stasis_message *message)
 {
 	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
+	RAII_VAR(struct ast_json *, json, NULL, ast_json_free);
+	RAII_VAR(char *, routing_key, NULL, free);
+	const char *routing_key_prefix = "stasis.channel";
 
-	/*ast_log(LOG_ERROR, "%s\n", stasis_message_type_name(stasis_message_type(message)));*/
-	stasis_msg = ast_json_dump_string_format(stasis_message_to_json(message, NULL), ast_ari_json_format());
-	if (stasis_msg) {
-		publish_to_amqp("stasis.channel", stasis_msg);
+	if (!(json = stasis_message_to_json(message, NULL))) {
+		return -1;
 	}
 
-	return -1;
+	if (!(stasis_msg = ast_json_dump_string_format(json, ast_ari_json_format()))) {
+		return -1;
+	}
+
+	if (!(routing_key = new_routing_key(routing_key_prefix, ""))) {
+		return -1;
+	}
+
+	publish_to_amqp(routing_key, stasis_msg);
+
+	return 0;
 }
 
 static int publish_to_amqp(char *topic, char *json_msg)
