@@ -500,6 +500,8 @@ static int unload_module(void)
 static void stasis_app_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
 	RAII_VAR(char *, str, NULL, ast_json_free);
+	RAII_VAR(char *, routing_key, NULL, free);
+	const char *routing_key_prefix = "stasis.app";
 
 	str = ast_json_dump_string_format(message, ast_ari_json_format());
 	if (str == NULL) {
@@ -507,7 +509,11 @@ static void stasis_app_message_handler(void *data, const char *app_name, struct 
 		return;
 	}
 
-	publish_to_amqp("stasis.app", str);
+	if (!(routing_key = new_routing_key(routing_key_prefix, app_name))) {
+		return;
+	}
+
+	publish_to_amqp(routing_key, str);
 
 	return;
 }
