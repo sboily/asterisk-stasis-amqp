@@ -105,6 +105,7 @@ static int setup_amqp(void);
 static int stasis_amqp_channel_log(struct stasis_message *message);
 static int publish_to_amqp(char *topic, char *json_msg);
 int register_to_new_stasis_app(const void *data);
+char *new_routing_key(const char *prefix, const char *suffix);
 
 
 /*! \brief stasis_amqp configuration */
@@ -323,9 +324,8 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 {
 	RAII_VAR(struct ast_json *, json, NULL, ast_json_unref);
 	RAII_VAR(struct ast_json *, event_name, NULL, ast_json_unref);
+	RAII_VAR(char *, routing_key, NULL, free);
 	const char *routing_key_prefix = "stasis.ami";
-	char routing_key[ROUTING_KEY_LEN];
-	char *ptr = NULL;
 	int res = 0;
 
 	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
@@ -350,30 +350,45 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 		return;
 	}
 
-	res = ast_json_object_set(json, "Event", event_name);
-	if (res) {
+	if ((res = ast_json_object_set(json, "Event", event_name))) {
 		ast_log(LOG_ERROR, "failed to set the event name on the json AMI event: %s\n", manager_blob->manager_event);
 		return;
 	}
 
-	RAII_VAR(char *, lowered_event_name, NULL, ast_free);
-	lowered_event_name = ast_strdup(manager_blob->manager_event);
-	if (!lowered_event_name) {
-		ast_log(LOG_ERROR, "failed to copy the AMI event name\n");
-		return;
-	}
-
-	for (ptr = lowered_event_name; *ptr != '\0'; ptr++) {
-		*ptr = tolower(*ptr);
-	}
-
-	res = snprintf(routing_key, ROUTING_KEY_LEN, "%s.%s", routing_key_prefix, lowered_event_name);
-	if (!res) {
-		ast_log(LOG_ERROR, "failed to format a routing key for an AMI event: %s\n", manager_blob->manager_event);
+	if (!(routing_key = new_routing_key(routing_key_prefix, manager_blob->manager_event))) {
 		return;
 	}
 
 	publish_to_amqp(routing_key, ast_json_dump_string(json));
+}
+
+char *new_routing_key(const char *prefix, const char *suffix)
+{
+	char *ptr = NULL;
+	char *routing_key = NULL;
+	RAII_VAR(char *, lowered_suffix, NULL, ast_free);
+	size_t routing_key_len = strlen(prefix) + strlen(suffix) + 1; /* "prefix.suffix" */
+
+	if (!(lowered_suffix = ast_strdup(suffix))) {
+		ast_log(LOG_ERROR, "failed to copy a routing key suffix\n");
+		return NULL;
+	}
+
+	for (ptr = lowered_suffix; *ptr != '\0'; ptr++) {
+		*ptr = tolower(*ptr);
+	}
+
+	if (!(routing_key = malloc(routing_key_len + 1))) {
+		ast_log(LOG_ERROR, "failed to allocate a string for the routing key\n");
+		return NULL;
+	}
+
+	if (!(snprintf(routing_key, routing_key_len + 1, "%s.%s", prefix, lowered_suffix))) {
+		ast_log(LOG_ERROR, "failed to format the routing key\n");
+		return NULL;
+	}
+
+	return routing_key;
 }
 
 /*!
