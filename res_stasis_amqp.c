@@ -426,7 +426,15 @@ static int publish_to_amqp(const char *topic, const char *name, struct ast_json 
 	RAII_VAR(char *, msg, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, json_msg, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, json_name, NULL, ast_json_unref);
+	RAII_VAR(struct ast_json *, json_eid, NULL, ast_json_unref);
+	char eid_str[128];
 	int res;
+
+	ast_eid_to_str(eid_str, sizeof(eid_str), &ast_eid_default);
+	if ((json_eid = ast_json_string_create(eid_str)) == NULL) {
+		ast_log(LOG_ERROR, "failed to create json string\n");
+		return -1;
+	}
 
 	if ((json_name = ast_json_string_create(name)) == NULL) {
 		ast_log(LOG_ERROR, "failed to create json string\n");
@@ -440,6 +448,11 @@ static int publish_to_amqp(const char *topic, const char *name, struct ast_json 
 
 	if (ast_json_object_set(json_msg, "event", json_name)) {
 		ast_log(LOG_ERROR, "failed to set event name\n");
+		return -1;
+	}
+
+	if (ast_json_object_set(json_msg, "eid", json_eid)) {
+		ast_log(LOG_ERROR, "failed to set event eid\n");
 		return -1;
 	}
 
