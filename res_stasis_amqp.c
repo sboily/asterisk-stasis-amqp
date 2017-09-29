@@ -103,7 +103,7 @@ struct app *allocate_app(const char *name);
 void destroy_app(void *obj);
 static int setup_amqp(void);
 static int stasis_amqp_channel_log(struct stasis_message *message);
-static int publish_to_amqp(char *topic, char *json_msg);
+static int publish_to_amqp(const char *topic, struct ast_json *body);
 int register_to_new_stasis_app(const void *data);
 char *new_routing_key(const char *prefix, const char *suffix);
 
@@ -359,7 +359,7 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 		return;
 	}
 
-	publish_to_amqp(routing_key, ast_json_dump_string(json));
+	publish_to_amqp(routing_key, json);
 }
 
 char *new_routing_key(const char *prefix, const char *suffix)
@@ -400,7 +400,6 @@ char *new_routing_key(const char *prefix, const char *suffix)
  */
 static int stasis_amqp_channel_log(struct stasis_message *message)
 {
-	RAII_VAR(char *, stasis_msg, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, json, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, channel, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, unique_id, NULL, ast_json_free);
@@ -420,24 +419,25 @@ static int stasis_amqp_channel_log(struct stasis_message *message)
 		return -1;
 	}
 
-	if (!(stasis_msg = ast_json_dump_string_format(json, ast_ari_json_format()))) {
-		return -1;
-	}
-
 	if (!(routing_key = new_routing_key(routing_key_prefix, ast_json_string_get(unique_id)))) {
 		return -1;
 	}
 
-	publish_to_amqp(routing_key, stasis_msg);
+	publish_to_amqp(routing_key, json);
 
 	return 0;
 }
 
-static int publish_to_amqp(char *topic, char *json_msg)
+static int publish_to_amqp(const char *topic, struct ast_json *body)
 {
-
 	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
+	RAII_VAR(char *, json_msg, NULL, ast_json_free);
 	int res;
+
+	if (!(json_msg = ast_json_dump_string(body))) {
+		ast_log(LOG_ERROR, "failed to convert json to string\n");
+		return -1;
+	}
 
 	amqp_basic_properties_t props = {
 		._flags = AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CONTENT_TYPE_FLAG,
@@ -521,21 +521,14 @@ static int unload_module(void)
 
 static void stasis_app_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
-	RAII_VAR(char *, str, NULL, ast_json_free);
 	RAII_VAR(char *, routing_key, NULL, free);
 	const char *routing_key_prefix = "stasis.app";
-
-	str = ast_json_dump_string_format(message, ast_ari_json_format());
-	if (str == NULL) {
-		ast_log(LOG_ERROR, "ARI: Failed to encode JSON object\n");
-		return;
-	}
 
 	if (!(routing_key = new_routing_key(routing_key_prefix, app_name))) {
 		return;
 	}
 
-	publish_to_amqp(routing_key, str);
+	publish_to_amqp(routing_key, message);
 
 	return;
 }
