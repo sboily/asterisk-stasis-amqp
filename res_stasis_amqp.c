@@ -468,8 +468,6 @@ static int publish_to_amqp(const char *topic, struct ast_json *body)
 
 static int load_config(int reload)
 {
-
-
 	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
 
