@@ -276,13 +276,23 @@ static void send_channel_event_to_amqp(void *data, struct stasis_subscription *s
 
 }
 
-static int ami_add_extra_fields_to_json(struct ast_json *json, char *fields)
+static int manager_event_to_json(struct ast_json *json, const char *event_name, char *fields)
 {
 	struct ast_json *json_value = NULL;
 	char *line = NULL;
 	char *word = NULL;
 	char *key, *value;
 	int res = 0;
+
+	json_value = ast_json_string_create(event_name);
+	if (!json_value) {
+		return -1;
+	}
+
+	res = ast_json_object_set(json, "Event", json_value);
+	if (res) {
+		return -1;
+	}
 
 	while ((line = strsep(&fields, "\r\n")) != NULL) {
 		key = NULL;
@@ -325,10 +335,11 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 {
 	RAII_VAR(struct ast_json *, json, NULL, ast_json_unref);
 	RAII_VAR(char *, routing_key, NULL, free);
+	RAII_VAR(struct ast_manager_event_blob *, manager_blob, NULL, ao2_cleanup);
 	const char *routing_key_prefix = "stasis.ami";
 	int res = 0;
 
-	struct ast_manager_event_blob *manager_blob = stasis_message_to_ami(message);
+	manager_blob = stasis_message_to_ami(message);
 	json = ast_json_object_create();
 
 	if (!manager_blob) {
@@ -342,7 +353,7 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 	RAII_VAR(char *, fields, NULL, ast_free);
 	fields = ast_strdup(manager_blob->extra_fields);
 
-	res = ami_add_extra_fields_to_json(json, fields);
+	res = manager_event_to_json(json, manager_blob->manager_event, fields);
 	if (res) {
 		ast_log(LOG_ERROR, "failed to create AMI message json payload for %s\n", manager_blob->extra_fields);
 		return;
