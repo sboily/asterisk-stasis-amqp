@@ -352,7 +352,7 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 		return;
 	}
 
-	publish_to_amqp(routing_key, manager_blob->manager_event, NULL, json);
+	publish_to_amqp(routing_key, manager_blob->manager_event, stasis_message_eid(message), json);
 }
 
 char *new_routing_key(const char *prefix, const char *suffix)
@@ -416,7 +416,7 @@ static int stasis_amqp_channel_log(struct stasis_message *message)
 		return -1;
 	}
 
-	publish_to_amqp(routing_key, "stasis_channel", NULL, json);
+	publish_to_amqp(routing_key, "stasis_channel", stasis_message_eid(message), json);
 
 	return 0;
 }
