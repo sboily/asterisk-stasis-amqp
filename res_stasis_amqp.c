@@ -103,9 +103,10 @@ struct app *allocate_app(const char *name);
 void destroy_app(void *obj);
 static int setup_amqp(void);
 static int stasis_amqp_channel_log(struct stasis_message *message);
-static int publish_to_amqp(const char *topic, const char *name, struct ast_json *body);
+static int publish_to_amqp(const char *topic, const char *name, const struct ast_eid *eid, struct ast_json *body);
 int register_to_new_stasis_app(const void *data);
 char *new_routing_key(const char *prefix, const char *suffix);
+struct ast_eid *eid_copy(const struct ast_eid *eid);
 
 
 /*! \brief stasis_amqp configuration */
@@ -351,7 +352,7 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 		return;
 	}
 
-	publish_to_amqp(routing_key, manager_blob->manager_event, json);
+	publish_to_amqp(routing_key, manager_blob->manager_event, NULL, json);
 }
 
 char *new_routing_key(const char *prefix, const char *suffix)
@@ -415,22 +416,39 @@ static int stasis_amqp_channel_log(struct stasis_message *message)
 		return -1;
 	}
 
-	publish_to_amqp(routing_key, "stasis_channel", json);
+	publish_to_amqp(routing_key, "stasis_channel", NULL, json);
 
 	return 0;
 }
 
-static int publish_to_amqp(const char *topic, const char *name, struct ast_json *body)
+struct ast_eid *eid_copy(const struct ast_eid *eid)
+{
+	struct ast_eid *new = NULL;
+	int i = 0;
+
+	if (!(new = ast_calloc(sizeof(*new), 1))) {
+		return NULL;
+	}
+
+	for (i = 0; i < 6; i++) {
+		new->eid[i] = eid->eid[i];
+	}
+	return new;
+}
+
+static int publish_to_amqp(const char *topic, const char *name, const struct ast_eid *eid, struct ast_json *body)
 {
 	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(char *, msg, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, json_msg, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, json_name, NULL, ast_json_unref);
 	RAII_VAR(struct ast_json *, json_eid, NULL, ast_json_unref);
+	RAII_VAR(struct ast_eid *, message_eid, NULL, ast_free);
 	char eid_str[128];
 	int res;
 
-	ast_eid_to_str(eid_str, sizeof(eid_str), &ast_eid_default);
+	message_eid = eid_copy(eid != NULL ? eid : &ast_eid_default);
+	ast_eid_to_str(eid_str, sizeof(eid_str), message_eid);
 	if ((json_eid = ast_json_string_create(eid_str)) == NULL) {
 		ast_log(LOG_ERROR, "failed to create json string\n");
 		return -1;
@@ -553,7 +571,7 @@ static void stasis_app_message_handler(void *data, const char *app_name, struct 
 		return;
 	}
 
-	publish_to_amqp(routing_key, "stasis_app", message);
+	publish_to_amqp(routing_key, "stasis_app", NULL, message);
 
 	return;
 }
