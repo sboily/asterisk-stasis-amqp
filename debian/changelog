@@ -1,3 +1,9 @@
+wazo-res-stasis-amqp (0.0.2-2) wazo-dev; urgency=medium
+
+  * update for asterisk 15.0.0
+
+ -- Wazo Maintainers <dev+pkg@wazo.community>  Wed, 11 Oct 2017 13:55:07 -0400
+
 wazo-res-stasis-amqp (0.0.2-1) wazo-dev; urgency=medium
 
   * modify asterisk-dev dependency
