@@ -1,3 +1,9 @@
+wazo-res-stasis-amqp (0.0.2-3) wazo-dev; urgency=medium
+
+  * add dbg package
+
+ -- Wazo Maintainers <dev+pkg@wazo.community>  Wed, 18 Oct 2017 14:43:28 -0400
+
 wazo-res-stasis-amqp (0.0.2-2) wazo-dev; urgency=medium
 
   * update for asterisk 15.0.0

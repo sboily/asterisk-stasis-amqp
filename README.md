@@ -1,3 +1,9 @@
+To build the module you will need the following dependencies
+
+* asterisk-dev
+* wazo-res-amqp-dev
+* librabbitmq-dev
+
 To install
 
     make
@@ -16,6 +22,6 @@ To load module
 
 Events is push for:
 
-* channel in routing key stasis.channel
-* ari apps in routing key stasis.app
-* ami in routing key stasis.ami
+* channel in routing key `stasis.channel.<channel uniqueid>`
+* ari apps in routing key `stasis.app.<app name>`
+* ami in routing key `stasis.ami.<event name>`
