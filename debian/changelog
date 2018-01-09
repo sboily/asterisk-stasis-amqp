@@ -1,3 +1,9 @@
+wazo-res-stasis-amqp (0.0.2-6) wazo-dev; urgency=medium
+
+  * update deprecated Source-Version variable
+
+ -- Wazo Maintainers <dev+pkg@wazo.community>  Tue, 09 Jan 2018 12:03:17 -0500
+
 wazo-res-stasis-amqp (0.0.2-5) wazo-dev; urgency=medium
 
   * add missing libssl-dev build-depends

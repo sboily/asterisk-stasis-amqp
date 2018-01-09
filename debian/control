@@ -16,5 +16,5 @@ Description: AMQP module to publish stasis message to rabbitmq.
 
 Package: wazo-res-stasis-amqp-dbg
 Architecture: any
-Depends: wazo-res-stasis-amqp (= ${Source-Version})
+Depends: wazo-res-stasis-amqp (= ${source:Version})
 Description: AMQP module to publish stasis message to rabbitmq with debug symbols
