@@ -1,3 +1,21 @@
+wazo-res-stasis-amqp (0.0.2-6) wazo-dev; urgency=medium
+
+  * update deprecated Source-Version variable
+
+ -- Wazo Maintainers <dev+pkg@wazo.community>  Tue, 09 Jan 2018 12:03:17 -0500
+
+wazo-res-stasis-amqp (0.0.2-5) wazo-dev; urgency=medium
+
+  * add missing libssl-dev build-depends
+
+ -- Wazo Maintainers <dev+pkg@wazo.community>  Tue, 09 Jan 2018 11:44:10 -0500
+
+wazo-res-stasis-amqp (0.0.2-4) wazo-dev; urgency=medium
+
+  * update for debian stretch
+
+ -- Wazo Maintainers <dev+pkg@wazo.community>  Tue, 09 Jan 2018 10:58:33 -0500
+
 wazo-res-stasis-amqp (0.0.2-3) wazo-dev; urgency=medium
 
   * add dbg package
