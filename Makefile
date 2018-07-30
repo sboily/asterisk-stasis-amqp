@@ -13,6 +13,11 @@ ifeq ($(strip $(ASTLIBDIR)),)
 else
 	MODULES_DIR:=$(INSTALL_PREFIX)$(ASTLIBDIR)
 endif
+ifeq ($(strip $(DOCDIR)),)
+	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)/usr/share/asterisk/documentation/thirdparty
+else
+	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)$(DOCDIR)
+endif
 INSTALL = install
 ASTETCDIR = $(INSTALL_PREFIX)/etc/asterisk
 SAMPLENAME = stasis_amqp.conf.sample
@@ -35,10 +40,10 @@ $(TARGET): $(OBJECTS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 install: $(TARGET)
-	mkdir -p $(DESTDIR)/usr/lib/asterisk/modules
-	mkdir -p $(DESTDIR)/usr/share/asterisk/documentation/thirdparty
+	mkdir -p $(DESTDIR)$(MODULES_DIR)
+	mkdir -p $(DESTDIR)$(DOCUMENTATION_DIR)
 	install -m 644 $(TARGET) $(DESTDIR)$(MODULES_DIR)
-	install -m 644 documentation/* $(DESTDIR)/usr/share/asterisk/documentation/thirdparty
+	install -m 644 documentation/* $(DESTDIR)$(DOCUMENTATION_DIR)
 	@echo " +-------- res_stasis_amqp installed --------+"
 	@echo " +                                           +"
 	@echo " + res_amqp has successfully been installed  +"
