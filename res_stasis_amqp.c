@@ -334,7 +334,7 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 									struct stasis_message *message)
 {
 	RAII_VAR(struct ast_json *, json, NULL, ast_json_unref);
-	RAII_VAR(char *, routing_key, NULL, free);
+	RAII_VAR(char *, routing_key, NULL, ast_free);
 	RAII_VAR(struct ast_manager_event_blob *, manager_blob, NULL, ao2_cleanup);
 	const char *routing_key_prefix = "stasis.ami";
 	int res = 0;
@@ -382,7 +382,7 @@ char *new_routing_key(const char *prefix, const char *suffix)
 		*ptr = tolower(*ptr);
 	}
 
-	if (!(routing_key = malloc(routing_key_len + 1))) {
+	if (!(routing_key = ast_malloc(routing_key_len + 1))) {
 		ast_log(LOG_ERROR, "failed to allocate a string for the routing key\n");
 		return NULL;
 	}
@@ -407,7 +407,7 @@ static int stasis_amqp_channel_log(struct stasis_message *message)
 	RAII_VAR(struct ast_json *, json, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, channel, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, unique_id, NULL, ast_json_free);
-	RAII_VAR(char *, routing_key, NULL, free);
+	RAII_VAR(char *, routing_key, NULL, ast_free);
 	const char *routing_key_prefix = "stasis.channel";
 
 	if (!(json = stasis_message_to_json(message, NULL))) {
@@ -575,7 +575,7 @@ static int unload_module(void)
 
 static void stasis_app_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
-	RAII_VAR(char *, routing_key, NULL, free);
+	RAII_VAR(char *, routing_key, NULL, ast_free);
 	const char *routing_key_prefix = "stasis.app";
 
 	if (!(routing_key = new_routing_key(routing_key_prefix, app_name))) {
@@ -676,6 +676,5 @@ static int load_module(void)
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Send all Stasis messages to AMQP",
 	.support_level = AST_MODULE_SUPPORT_EXTENDED,
 	.load = load_module,
-	.unload = unload_module,
-	.nonoptreq = "res_stasis_amqp"
+	.unload = unload_module
 );
