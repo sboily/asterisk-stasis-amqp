@@ -4,14 +4,14 @@ Priority: extra
 Maintainer: Wazo Maintainers <dev@wazo.community>
 Build-Depends: 
  debhelper (>= 9),
- asterisk-dev (>= 8:15),
+ asterisk-dev (>= 8:16),
  libssl-dev,
  wazo-res-amqp-dev
 Standards-Version: 3.9.6
 
 Package: wazo-res-stasis-amqp
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, asterisk (>= 8:15), wazo-res-amqp
+Depends: ${shlibs:Depends}, ${misc:Depends}, asterisk (>= 8:16), wazo-res-amqp
 Description: AMQP module to publish stasis message to rabbitmq.
 
 Package: wazo-res-stasis-amqp-dbg
