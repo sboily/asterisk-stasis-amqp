@@ -53,6 +53,10 @@ install: $(TARGET)
 	@echo " +              make samples                 +"
 	@echo " +-------------------------------------------+"
 
+install-dev:
+	install -m 644 asterisk/stasis_amqp.h /usr/include/asterisk
+	@echo " +-------- res_stasis_amqp headers installed --------+"
+
 clean:
 	rm -f $(OBJECTS)
 	rm -f $(TARGET)
