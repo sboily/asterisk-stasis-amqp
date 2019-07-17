@@ -33,6 +33,8 @@ LDFLAGS = -Wall -shared
 
 .PHONY: install clean
 
+all: $(TARGET) res_ari_amqp.so
+
 $(TARGET): $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) -o $@ $(LIBS)
 
@@ -43,6 +45,7 @@ install: $(TARGET)
 	mkdir -p $(DESTDIR)$(MODULES_DIR)
 	mkdir -p $(DESTDIR)$(DOCUMENTATION_DIR)
 	install -m 644 $(TARGET) $(DESTDIR)$(MODULES_DIR)
+	install -m 644 res_ari_amqp.so $(DESTDIR)$(MODULES_DIR)
 	install -m 644 documentation/* $(DESTDIR)$(DOCUMENTATION_DIR)
 	@echo " +-------- res_stasis_amqp installed --------+"
 	@echo " +                                           +"
@@ -57,9 +60,12 @@ install-dev:
 	install -m 644 asterisk/stasis_amqp.h /usr/include/asterisk
 	@echo " +-------- res_stasis_amqp headers installed --------+"
 
+res_ari_amqp.so: res_ari_amqp.o resource_amqp.o
+	$(CC) $(LDFLAGS)  -o $@ $^ $(LIBS)
+
+
 clean:
-	rm -f $(OBJECTS)
-	rm -f $(TARGET)
+	rm -f *.so *.o
 
 samples:
 	$(INSTALL) -m 644 $(SAMPLENAME) $(DESTDIR)$(ASTETCDIR)/$(CONFNAME)
