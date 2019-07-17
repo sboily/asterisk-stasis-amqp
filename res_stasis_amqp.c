@@ -540,13 +540,6 @@ int subscribe_to_stasis(const char *app_name, const char *connection)
 
 static int load_module(void)
 {
-	if (!ast_module_check("res_amqp.so")) {
-		if (ast_load_resource("res_amqp.so") != AST_MODULE_LOAD_SUCCESS) {
-			ast_log(LOG_ERROR, "Cannot load res_amqp, so res_stasis_amqp cannot be loaded\n");
-			return AST_MODULE_LOAD_DECLINE;
-		}
-	}
-
 	if (load_config(0) != 0) {
 		ast_log(LOG_WARNING, "Configuration failed to load\n");
 		return AST_MODULE_LOAD_DECLINE;
@@ -581,4 +574,5 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_
 	.load = load_module,
 	.unload = unload_module,
 	.load_pri = AST_MODPRI_APP_DEPEND,
+	.requires = "res_ari,res_ari_model,res_stasis,res_amqp",
 );
