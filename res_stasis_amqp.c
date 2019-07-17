@@ -528,10 +528,13 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 	return;
 }
 
-int subscribe_to_stasis(const char *app_name)
+int subscribe_to_stasis(const char *app_name, const char *connection)
 {
+	struct ast_json *json = ast_json_object_create();
+
+	ast_json_object_set(json, "connection", ast_json_string_create(connection));
 	int res = 0;
-	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, NULL);
+	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, json);
 	return res;
 }
 

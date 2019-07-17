@@ -5,6 +5,6 @@
 #ifndef ASTERISK_STASIS_AMQP_H
 #define ASTERISK_STASIS_AMQP_H
 
-int subscribe_to_stasis(const char *app_name);
+int subscribe_to_stasis(const char *app_name, const char *connection);
 
 #endif //ASTERISK_STASIS_AMQP_H
