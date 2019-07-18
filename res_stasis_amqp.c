@@ -92,18 +92,19 @@
  * The ast_sched_context used for stasis application polling
  */
 static struct ast_sched_context *stasis_app_sched_context;
-struct ao2_container *registered_apps = NULL;
+static struct ao2_container *registered_apps = NULL;
 
 /*! Regular Stasis subscription */
 static struct stasis_subscription *sub;
 static struct stasis_subscription *manager;
 
-int app_cmp(void *obj, void *arg, int flags);
-struct app *allocate_app(const char *name);
+static int app_cmp(void *obj, void *arg, int flags);
+int app_hash(const void *obj, const int flags);
+void destroy_string(void *obj);
+struct app *allocate_app(const char *name, const char *connection);
 void destroy_app(void *obj);
 static int setup_amqp(void);
 static int publish_to_amqp(const char *topic, const char *name, const struct ast_eid *eid, struct ast_json *body);
-int register_to_new_stasis_app(const void *data);
 char *new_routing_key(const char *prefix, const char *suffix);
 struct ast_eid *eid_copy(const struct ast_eid *eid);
 
@@ -114,6 +115,7 @@ struct stasis_amqp_conf {
 
 struct app {
 	char *name;
+	char *connection;
 };
 
 
@@ -158,23 +160,50 @@ int app_cmp(void *obj, void *arg, int flags)
 	return 0;
 }
 
-struct app *allocate_app(const char *name)
+int app_hash(const void *obj, const int flags)
 {
-	struct app *new_app;
+    const char *key;
+    const struct app *object;
 
-	new_app = ao2_alloc(sizeof(*new_app), destroy_app);
-	new_app->name = ast_strdup(name);
 
-	return new_app;
+    /* This is a common template for hash functions. */
+    switch (flags & OBJ_SEARCH_MASK) {
+    case OBJ_SEARCH_KEY:
+		key = obj;
+		break;
+    case OBJ_SEARCH_OBJECT:
+        /* An app was passed to the hash function. */
+        object = obj;
+        ast_assert(object);
+        ast_assert(object->connection);
+        key = object->name;
+        break;
+    default:
+        ast_assert(0);
+        return 0;
+    }
+    /* ast_str_hash() is a handy utility for calculating the hash of a string */
+    ast_log(LOG_ERROR, "HASH: %d\n", ast_str_hash(key));
+    return ast_str_hash(key);
 }
 
 void destroy_app(void *obj)
 {
 	struct app *to_destroy = obj;
-
+	ast_free(to_destroy->connection);
 	ast_free(to_destroy->name);
 }
 
+struct app *allocate_app(const char *name, const char *connection)
+{
+	struct app *new_app;
+
+	new_app = ao2_alloc(sizeof(*new_app), destroy_app);
+	new_app->name = ast_strdup(name);
+	new_app->connection = ast_strdup(connection);
+
+	return new_app;
+}
 static void conf_global_dtor(void *obj)
 {
 	struct stasis_amqp_global_conf *global = obj;
@@ -516,6 +545,15 @@ static int unload_module(void)
 
 static void stasis_amqp_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
+//	ast_log(LOG_ERROR, "COUNT: %d, NAME: %s\n",ao2_container_count(registered_apps), app_name);
+//
+//	struct app *target =  ao2_find(registered_apps, app_name, OBJ_SEARCH_KEY);
+//	if (target) {
+		ast_log(LOG_ERROR, "DATAVALUE: %s\n",(char*)data);
+//	} else {
+//		ast_log(LOG_ERROR, "DATAVALUE NOT FOUND\n");
+//	}
+
 	RAII_VAR(char *, routing_key, NULL, ast_free);
 	const char *routing_key_prefix = "stasis.app";
 
@@ -528,13 +566,24 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 	return;
 }
 
+void destroy_string(void *obj)
+{
+	ast_free(obj);
+}
+
 int subscribe_to_stasis(const char *app_name, const char *connection)
 {
-	struct ast_json *json = ast_json_object_create();
-
-	ast_json_object_set(json, "connection", ast_json_string_create(connection));
 	int res = 0;
-	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, json);
+
+	char *a = ao2_alloc(strlen(connection) + 1, destroy_string);
+	if (!a) {
+		ast_log(LOG_ERROR, "unable to allocate memory\n");
+		return -2;
+	}
+	strcpy(a, connection);
+
+//	ao2_link(registered_apps, a);
+	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, a);
 	return res;
 }
 
@@ -545,7 +594,9 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	registered_apps = ao2_container_alloc(0, NULL, app_cmp);
+	registered_apps = ao2_container_alloc(13,
+        app_hash,
+        app_cmp);
 
 	/* Subscription to receive all of the messages from manager topic */
 	manager = stasis_subscribe(ast_manager_get_topic(), send_ami_event_to_amqp, NULL);

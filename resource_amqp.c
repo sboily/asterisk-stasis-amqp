@@ -48,9 +48,15 @@ void ast_ari_amqp_stasis_subscribe(struct ast_variable *headers,
 
 	ast_log(LOG_ERROR, "TODO: ast_ari_amqp_stasis_subscribe\n");
 
-	subscribe_to_stasis(app_name, connection);
+	int res = subscribe_to_stasis(app_name, connection);
+	if (res == -1) {
+		ast_ari_response_error(response, 409, "Application already exists", "The application's name must be unique");
+		return;
+	} else if (res != 0) {
+		ast_ari_response_error(response, 500, "Error", "Unable to allocate json");
+		return;
+	}
 	ast_ari_response_no_content(response);
-
 }
 
 void ast_ari_amqp_stasis_unsubscribe(struct ast_variable *headers,
