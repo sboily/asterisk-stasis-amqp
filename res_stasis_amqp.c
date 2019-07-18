@@ -92,17 +92,13 @@
  * The ast_sched_context used for stasis application polling
  */
 static struct ast_sched_context *stasis_app_sched_context;
-static struct ao2_container *registered_apps = NULL;
 
 /*! Regular Stasis subscription */
 static struct stasis_subscription *sub;
 static struct stasis_subscription *manager;
 
 static int app_cmp(void *obj, void *arg, int flags);
-int app_hash(const void *obj, const int flags);
-void destroy_string(void *obj);
-struct app *allocate_app(const char *name, const char *connection);
-void destroy_app(void *obj);
+static void destroy_string(void *obj);
 static int setup_amqp(void);
 static int publish_to_amqp(const char *topic, const char *name, const struct ast_eid *eid, struct ast_json *body);
 char *new_routing_key(const char *prefix, const char *suffix);
@@ -112,12 +108,6 @@ struct ast_eid *eid_copy(const struct ast_eid *eid);
 struct stasis_amqp_conf {
 	struct stasis_amqp_global_conf *global;
 };
-
-struct app {
-	char *name;
-	char *connection;
-};
-
 
 /*! \brief global config structure */
 struct stasis_amqp_global_conf {
@@ -146,64 +136,6 @@ static struct aco_type global_option = {
 
 static struct aco_type *global_options[] = ACO_TYPES(&global_option);
 
-int app_cmp(void *obj, void *arg, int flags)
-{
-	const struct app *left = obj;
-	const struct app *right = arg;
-
-	switch (flags & OBJ_SEARCH_MASK) {
-	case OBJ_SEARCH_OBJECT:
-		return strcmp(left->name, right->name) == 0 ? CMP_MATCH : 0;
-	default:
-		break;
-	}
-	return 0;
-}
-
-int app_hash(const void *obj, const int flags)
-{
-    const char *key;
-    const struct app *object;
-
-
-    /* This is a common template for hash functions. */
-    switch (flags & OBJ_SEARCH_MASK) {
-    case OBJ_SEARCH_KEY:
-		key = obj;
-		break;
-    case OBJ_SEARCH_OBJECT:
-        /* An app was passed to the hash function. */
-        object = obj;
-        ast_assert(object);
-        ast_assert(object->connection);
-        key = object->name;
-        break;
-    default:
-        ast_assert(0);
-        return 0;
-    }
-    /* ast_str_hash() is a handy utility for calculating the hash of a string */
-    ast_log(LOG_ERROR, "HASH: %d\n", ast_str_hash(key));
-    return ast_str_hash(key);
-}
-
-void destroy_app(void *obj)
-{
-	struct app *to_destroy = obj;
-	ast_free(to_destroy->connection);
-	ast_free(to_destroy->name);
-}
-
-struct app *allocate_app(const char *name, const char *connection)
-{
-	struct app *new_app;
-
-	new_app = ao2_alloc(sizeof(*new_app), destroy_app);
-	new_app->name = ast_strdup(name);
-	new_app->connection = ast_strdup(connection);
-
-	return new_app;
-}
 static void conf_global_dtor(void *obj)
 {
 	struct stasis_amqp_global_conf *global = obj;
@@ -398,7 +330,6 @@ char *new_routing_key(const char *prefix, const char *suffix)
 		ast_log(LOG_ERROR, "failed to format the routing key\n");
 		return NULL;
 	}
-
 	return routing_key;
 }
 
@@ -545,17 +476,13 @@ static int unload_module(void)
 
 static void stasis_amqp_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
-//	ast_log(LOG_ERROR, "COUNT: %d, NAME: %s\n",ao2_container_count(registered_apps), app_name);
-//
-//	struct app *target =  ao2_find(registered_apps, app_name, OBJ_SEARCH_KEY);
-//	if (target) {
-		ast_log(LOG_ERROR, "DATAVALUE: %s\n",(char*)data);
-//	} else {
-//		ast_log(LOG_ERROR, "DATAVALUE NOT FOUND\n");
-//	}
-
 	RAII_VAR(char *, routing_key, NULL, ast_free);
 	const char *routing_key_prefix = "stasis.app";
+
+	const char *connection = data;
+
+	ast_assert(connection);
+	ast_log(LOG_ERROR, "CONNECTION:%s\n", connection);
 
 	if (!(routing_key = new_routing_key(routing_key_prefix, app_name))) {
 		return;
@@ -566,7 +493,7 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 	return;
 }
 
-void destroy_string(void *obj)
+static void destroy_string(void *obj)
 {
 	ast_free(obj);
 }
@@ -582,7 +509,6 @@ int subscribe_to_stasis(const char *app_name, const char *connection)
 	}
 	strcpy(a, connection);
 
-//	ao2_link(registered_apps, a);
 	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, a);
 	return res;
 }
@@ -593,10 +519,6 @@ static int load_module(void)
 		ast_log(LOG_WARNING, "Configuration failed to load\n");
 		return AST_MODULE_LOAD_DECLINE;
 	}
-
-	registered_apps = ao2_container_alloc(13,
-        app_hash,
-        app_cmp);
 
 	/* Subscription to receive all of the messages from manager topic */
 	manager = stasis_subscribe(ast_manager_get_topic(), send_ami_event_to_amqp, NULL);
