@@ -43,7 +43,6 @@
 struct ast_ari_amqp_stasis_subscribe_args {
 	/*! Application's name */
 	const char *application_name;
-	const char *connection;
 };
 /*!
  * \brief Create a stasis subscription to AMQP.
@@ -59,7 +58,6 @@ void ast_ari_amqp_stasis_subscribe(struct ast_variable *headers, struct ast_ari_
 struct ast_ari_amqp_stasis_unsubscribe_args {
 	/*! Application's name */
 	const char *application_name;
-	const char *connection;
 };
 /*!
  * \brief Remove a stasis subscription to AMQP.

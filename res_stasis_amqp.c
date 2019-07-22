@@ -99,6 +99,7 @@ static struct stasis_subscription *manager;
 
 static int app_cmp(void *obj, void *arg, int flags);
 static void destroy_string(void *obj);
+static int set_target_amqp_connection(const char *name);
 static int setup_amqp(void);
 static int publish_to_amqp(const char *topic, const char *name, const struct ast_eid *eid, struct ast_json *body);
 char *new_routing_key(const char *prefix, const char *suffix);
@@ -193,6 +194,26 @@ CONFIG_INFO_STANDARD(cfg_info, confs, conf_alloc,
 	.pre_apply_config = setup_amqp,
 );
 
+static int set_target_amqp_connection(const char *name) {
+	struct stasis_amqp_conf *conf = aco_pending_config(&cfg_info);
+	if (!conf) {
+	ast_log(LOG_ERROR, "BEFORE END!!\n");
+		return 0;
+	}
+	if (!conf->global) {
+		ast_log(LOG_ERROR, "Invalid stasis_amqp.conf\n");
+		return -1;
+	}
+	/* Refresh the AMQP connection */
+	ao2_cleanup(conf->global->amqp);
+	conf->global->amqp = ast_amqp_get_connection(name);
+	if (!conf->global->amqp) {
+		ast_log(LOG_ERROR, "Could not get AMQP connection %s\n", name);
+		return -1;
+	}
+
+	return 0;
+}
 
 static int setup_amqp(void)
 {
@@ -487,7 +508,11 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 	if (!(routing_key = new_routing_key(routing_key_prefix, app_name))) {
 		return;
 	}
-
+//	if (set_target_amqp_connection(connection)) {
+//		ast_log(LOG_ERROR, "Unable to set connection: %s\n", connection);
+//		return;
+//	}
+// change event type use message name
 	publish_to_amqp(routing_key, "stasis_app", NULL, message);
 
 	return;
@@ -498,18 +523,10 @@ static void destroy_string(void *obj)
 	ast_free(obj);
 }
 
-int subscribe_to_stasis(const char *app_name, const char *connection)
+int ast_subscribe_to_stasis(const char *app_name)
 {
 	int res = 0;
-
-	char *a = ao2_alloc(strlen(connection) + 1, destroy_string);
-	if (!a) {
-		ast_log(LOG_ERROR, "unable to allocate memory\n");
-		return -2;
-	}
-	strcpy(a, connection);
-
-	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, a);
+	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, NULL);
 	return res;
 }
 

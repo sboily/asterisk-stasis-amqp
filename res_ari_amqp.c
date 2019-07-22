@@ -51,7 +51,7 @@
 #define MAX_VALS 128
 
 /*!
- * \brief Parameter parsing callback for /amqp/{applicationName}/{connection}.
+ * \brief Parameter parsing callback for /amqp/{applicationName}.
  * \param get_params GET parameters in the HTTP request.
  * \param path_vars Path variables extracted from the request.
  * \param headers HTTP headers.
@@ -73,9 +73,6 @@ static void ast_ari_amqp_stasis_subscribe_cb(
 		if (strcmp(i->name, "applicationName") == 0) {
 			args.application_name = (i->value);
 		} else
-		if (strcmp(i->name, "connection") == 0) {
-			args.connection = (i->value);
-		} else
 		{}
 	}
 	ast_ari_amqp_stasis_subscribe(headers, &args, response);
@@ -89,7 +86,6 @@ static void ast_ari_amqp_stasis_subscribe_cb(
 	case 500: /* Internal Server Error */
 	case 501: /* Not Implemented */
 	case 400: /* Bad request. */
-	case 404: /* Connection does not exist. */
 	case 409: /* Application already exists */
 		is_valid = 1;
 		break;
@@ -98,13 +94,13 @@ static void ast_ari_amqp_stasis_subscribe_cb(
 			is_valid = ast_ari_validate_application(
 				response->message);
 		} else {
-			ast_log(LOG_ERROR, "Invalid error response %d for /amqp/{applicationName}/{connection}\n", code);
+			ast_log(LOG_ERROR, "Invalid error response %d for /amqp/{applicationName}\n", code);
 			is_valid = 0;
 		}
 	}
 
 	if (!is_valid) {
-		ast_log(LOG_ERROR, "Response validation failed for /amqp/{applicationName}/{connection}\n");
+		ast_log(LOG_ERROR, "Response validation failed for /amqp/{applicationName}\n");
 		ast_ari_response_error(response, 500,
 			"Internal Server Error", "Response validation failed");
 	}
@@ -114,7 +110,7 @@ fin: __attribute__((unused))
 	return;
 }
 /*!
- * \brief Parameter parsing callback for /amqp/{applicationName}/{connection}.
+ * \brief Parameter parsing callback for /amqp/{applicationName}.
  * \param get_params GET parameters in the HTTP request.
  * \param path_vars Path variables extracted from the request.
  * \param headers HTTP headers.
@@ -135,9 +131,6 @@ static void ast_ari_amqp_stasis_unsubscribe_cb(
 	for (i = path_vars; i; i = i->next) {
 		if (strcmp(i->name, "applicationName") == 0) {
 			args.application_name = (i->value);
-		} else
-		if (strcmp(i->name, "connection") == 0) {
-			args.connection = (i->value);
 		} else
 		{}
 	}
@@ -160,13 +153,13 @@ static void ast_ari_amqp_stasis_unsubscribe_cb(
 			is_valid = ast_ari_validate_application(
 				response->message);
 		} else {
-			ast_log(LOG_ERROR, "Invalid error response %d for /amqp/{applicationName}/{connection}\n", code);
+			ast_log(LOG_ERROR, "Invalid error response %d for /amqp/{applicationName}\n", code);
 			is_valid = 0;
 		}
 	}
 
 	if (!is_valid) {
-		ast_log(LOG_ERROR, "Response validation failed for /amqp/{applicationName}/{connection}\n");
+		ast_log(LOG_ERROR, "Response validation failed for /amqp/{applicationName}\n");
 		ast_ari_response_error(response, 500,
 			"Internal Server Error", "Response validation failed");
 	}
@@ -177,8 +170,8 @@ fin: __attribute__((unused))
 }
 
 /*! \brief REST handler for /api-docs/amqp.json */
-static struct stasis_rest_handlers amqp_applicationName_connection = {
-	.path_segment = "connection",
+static struct stasis_rest_handlers amqp_applicationName = {
+	.path_segment = "applicationName",
 	.is_wildcard = 1,
 	.callbacks = {
 		[AST_HTTP_POST] = ast_ari_amqp_stasis_subscribe_cb,
@@ -186,15 +179,6 @@ static struct stasis_rest_handlers amqp_applicationName_connection = {
 	},
 	.num_children = 0,
 	.children = {  }
-};
-/*! \brief REST handler for /api-docs/amqp.json */
-static struct stasis_rest_handlers amqp_applicationName = {
-	.path_segment = "applicationName",
-	.is_wildcard = 1,
-	.callbacks = {
-	},
-	.num_children = 1,
-	.children = { &amqp_applicationName_connection, }
 };
 /*! \brief REST handler for /api-docs/amqp.json */
 static struct stasis_rest_handlers amqp = {
@@ -215,6 +199,7 @@ static int load_module(void)
 {
 	int res = 0;
 
+
 	res |= ast_ari_add_handler(&amqp);
 	if (res) {
 		unload_module();
@@ -228,5 +213,5 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "RESTful API module - AMQ
 	.support_level = AST_MODULE_SUPPORT_CORE,
 	.load = load_module,
 	.unload = unload_module,
-	.requires = "res_ari,res_ari_model,res_stasis,res_stasis_amqp",
+	.requires = "res_ari,res_ari_model,res_stasis",
 );
