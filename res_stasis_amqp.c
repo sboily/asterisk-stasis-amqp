@@ -84,6 +84,7 @@
 
 #include "asterisk/stasis_amqp.h"
 #include "asterisk/amqp.h"
+//#include "/usr/local/asterisk/asterisk-16.4.0/res/stasis/app.h"
 
 #define CONF_FILENAME "stasis_amqp.conf"
 #define ROUTING_KEY_LEN 256
@@ -99,7 +100,6 @@ static struct stasis_subscription *manager;
 
 static int app_cmp(void *obj, void *arg, int flags);
 static void destroy_string(void *obj);
-static int set_target_amqp_connection(const char *name);
 static int setup_amqp(void);
 static int publish_to_amqp(const char *topic, const char *name, const struct ast_eid *eid, struct ast_json *body);
 char *new_routing_key(const char *prefix, const char *suffix);
@@ -193,27 +193,6 @@ CONFIG_INFO_STANDARD(cfg_info, confs, conf_alloc,
 	.files = ACO_FILES(&conf_file),
 	.pre_apply_config = setup_amqp,
 );
-
-static int set_target_amqp_connection(const char *name) {
-	struct stasis_amqp_conf *conf = aco_pending_config(&cfg_info);
-	if (!conf) {
-	ast_log(LOG_ERROR, "BEFORE END!!\n");
-		return 0;
-	}
-	if (!conf->global) {
-		ast_log(LOG_ERROR, "Invalid stasis_amqp.conf\n");
-		return -1;
-	}
-	/* Refresh the AMQP connection */
-	ao2_cleanup(conf->global->amqp);
-	conf->global->amqp = ast_amqp_get_connection(name);
-	if (!conf->global->amqp) {
-		ast_log(LOG_ERROR, "Could not get AMQP connection %s\n", name);
-		return -1;
-	}
-
-	return 0;
-}
 
 static int setup_amqp(void)
 {
@@ -500,34 +479,33 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 	RAII_VAR(char *, routing_key, NULL, ast_free);
 	const char *routing_key_prefix = "stasis.app";
 
-	const char *connection = data;
-
-	ast_assert(connection);
-	ast_log(LOG_ERROR, "CONNECTION:%s\n", connection);
-
 	if (!(routing_key = new_routing_key(routing_key_prefix, app_name))) {
 		return;
 	}
-//	if (set_target_amqp_connection(connection)) {
-//		ast_log(LOG_ERROR, "Unable to set connection: %s\n", connection);
-//		return;
-//	}
-// change event type use message name
+
 	publish_to_amqp(routing_key, "stasis_app", NULL, message);
 
 	return;
 }
 
-static void destroy_string(void *obj)
-{
-	ast_free(obj);
-}
-
 int ast_subscribe_to_stasis(const char *app_name)
 {
 	int res = 0;
-	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, NULL);
+	res = stasis_app_register(app_name, &stasis_amqp_message_handler, NULL);
 	return res;
+}
+
+int ast_unsubscribe_from_stasis(const char *app_name)
+{
+	struct stasis_app *app = stasis_app_get_by_name(app_name);
+
+	if (!app) {
+		return -1;
+	}
+
+	stasis_app_unregister(app_name);
+
+	return 0;
 }
 
 static int load_module(void)

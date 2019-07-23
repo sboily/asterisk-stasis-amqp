@@ -21,4 +21,6 @@
 
 int ast_subscribe_to_stasis(const char *app_name);
 
+int ast_unsubscribe_from_stasis(const char *app_name);
+
 #endif //ASTERISK_STASIS_AMQP_H

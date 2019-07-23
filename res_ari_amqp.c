@@ -43,7 +43,7 @@
 #include "asterisk/app.h"
 #include "asterisk/module.h"
 #include "asterisk/stasis_app.h"
-#include "resource_amqp.h"
+#include "ari/resource_amqp.h"
 #if defined(AST_DEVMODE)
 #include "ari/ari_model_validators.h"
 #endif
@@ -86,7 +86,6 @@ static void ast_ari_amqp_stasis_subscribe_cb(
 	case 500: /* Internal Server Error */
 	case 501: /* Not Implemented */
 	case 400: /* Bad request. */
-	case 409: /* Application already exists */
 		is_valid = 1;
 		break;
 	default:
@@ -145,7 +144,6 @@ static void ast_ari_amqp_stasis_unsubscribe_cb(
 	case 500: /* Internal Server Error */
 	case 501: /* Not Implemented */
 	case 400: /* Bad request. */
-	case 404: /* Application not found */
 		is_valid = 1;
 		break;
 	default:
