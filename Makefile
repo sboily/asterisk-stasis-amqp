@@ -65,7 +65,7 @@ install-dev:
 
 uninstall:
 	rm /var/lib/asterisk/rest-api/amqp.json
-	cd /var/lib/asterisk/rest-api/ && patch -R < resources.json.patch
+	patch -R /var/lib/asterisk/rest-api/resources.json resources.json.patch
 
 res_ari_amqp.so: res_ari_amqp.o resource_amqp.o
 	$(CC) $(LDFLAGS)  -o $@ $^ $(LIBS)
