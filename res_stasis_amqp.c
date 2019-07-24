@@ -84,7 +84,6 @@
 
 #include "asterisk/stasis_amqp.h"
 #include "asterisk/amqp.h"
-//#include "/usr/local/asterisk/asterisk-16.4.0/res/stasis/app.h"
 
 #define CONF_FILENAME "stasis_amqp.conf"
 #define ROUTING_KEY_LEN 256
@@ -491,7 +490,7 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 int ast_subscribe_to_stasis(const char *app_name)
 {
 	int res = 0;
-	res = stasis_app_register(app_name, &stasis_amqp_message_handler, NULL);
+	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, NULL);
 	return res;
 }
 
