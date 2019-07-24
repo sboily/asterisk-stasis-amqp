@@ -43,7 +43,7 @@
 #include "asterisk/app.h"
 #include "asterisk/module.h"
 #include "asterisk/stasis_app.h"
-#include "ari/resource_amqp.h"
+#include "resource_amqp.h"
 #if defined(AST_DEVMODE)
 #include "ari/ari_model_validators.h"
 #endif
