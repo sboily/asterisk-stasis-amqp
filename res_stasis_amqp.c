@@ -475,16 +475,15 @@ static int unload_module(void)
 
 static void stasis_amqp_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
-	ast_debug(3, "called stasis amqp handler\n");
+	ast_debug(4, "called stasis amqp handler for application: '%s'\n", app_name);
 	RAII_VAR(char *, routing_key, NULL, ast_free);
 	const char *routing_key_prefix = "stasis.app";
 
 	if (!(routing_key = new_routing_key(routing_key_prefix, app_name))) {
 		return;
 	}
-	 ast_debug(3, "DEBUG STRING!");
 
-	ast_log(LOG_ERROR, "About to publish!\n");
+	ast_debug(3, "publishing with routing key: '%s'\n", routing_key);
 	publish_to_amqp(routing_key, "stasis_app", NULL, message);
 
 	return;
@@ -493,7 +492,7 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 int ast_subscribe_to_stasis(const char *app_name)
 {
 	int res = 0;
-	ast_debug(3, "called subscribe to stasis\n");
+	ast_debug(1, "called subscribe to stasis for application: '%s'\n", app_name);
 	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, NULL);
 	return res;
 }
