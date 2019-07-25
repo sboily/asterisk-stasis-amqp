@@ -271,9 +271,6 @@ static int manager_event_to_json(struct ast_json *json, const char *event_name, 
 static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 									struct stasis_message *message)
 {
-	ast_debug(3, "DEBUG STRING1!\n");
- 	ast_verbose("verbosity!\n");
-	ast_log(LOG_ERROR, "Called publishing!\n");
 	RAII_VAR(struct ast_json *, json, NULL, ast_json_unref);
 	RAII_VAR(char *, routing_key, NULL, ast_free);
 	RAII_VAR(struct ast_manager_event_blob *, manager_blob, NULL, ao2_cleanup);
@@ -303,9 +300,7 @@ static void send_ami_event_to_amqp(void *data, struct stasis_subscription *sub,
 	if (!(routing_key = new_routing_key(routing_key_prefix, manager_blob->manager_event))) {
 		return;
 	}
-	 ast_debug(3, "DEBUG STRING!");
 
-	ast_log(LOG_ERROR, "About to publish!\n");
 	publish_to_amqp(routing_key, manager_blob->manager_event, stasis_message_eid(message), json);
 }
 
@@ -480,13 +475,18 @@ static int unload_module(void)
 
 static void stasis_amqp_message_handler(void *data, const char *app_name, struct ast_json *message)
 {
+	ast_debug(3, "DEBUG STRING1!\n");
+ 	ast_verbose("verbosity!\n");
+	ast_log(LOG_ERROR, "Called publishing!\n");
 	RAII_VAR(char *, routing_key, NULL, ast_free);
 	const char *routing_key_prefix = "stasis.app";
 
 	if (!(routing_key = new_routing_key(routing_key_prefix, app_name))) {
 		return;
 	}
+	 ast_debug(3, "DEBUG STRING!");
 
+	ast_log(LOG_ERROR, "About to publish!\n");
 	publish_to_amqp(routing_key, "stasis_app", NULL, message);
 
 	return;
