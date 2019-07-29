@@ -14,7 +14,7 @@ else
 	MODULES_DIR:=$(INSTALL_PREFIX)$(ASTLIBDIR)
 endif
 ifeq ($(strip $(DOCDIR)),)
-	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)/var/lib/asterisk/documentation/thirdparty
+	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)/usr/share/asterisk/documentation/thirdparty
 else
 	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)$(DOCDIR)
 endif
@@ -47,8 +47,8 @@ install: $(TARGET)
 	install -m 644 $(TARGET) $(DESTDIR)$(MODULES_DIR)
 	install -m 644 res_ari_amqp.so $(DESTDIR)$(MODULES_DIR)
 	install -m 644 documentation/* $(DESTDIR)$(DOCUMENTATION_DIR)
-	install -D amqp.json /var/lib/asterisk/rest-api/amqp.json
-	patch /var/lib/asterisk/rest-api/resources.json resources.json.patch
+	install -D amqp.json /usr/share/asterisk/rest-api/amqp.json
+	patch /usr/share/asterisk/rest-api/resources.json resources.json.patch
 
 	@echo " +-------- res_stasis_amqp installed --------+"
 	@echo " +                                           +"
