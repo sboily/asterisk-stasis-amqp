@@ -211,5 +211,5 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "RESTful API module - AMQ
 	.support_level = AST_MODULE_SUPPORT_CORE,
 	.load = load_module,
 	.unload = unload_module,
-	.requires = "res_ari,res_ari_model,res_stasis,res_stasis_amqp",
+	.requires = "res_ari,res_ari_model,res_stasis_amqp",
 );
