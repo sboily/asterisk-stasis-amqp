@@ -45,6 +45,7 @@ install: $(TARGET)
 	install -m 644 res_ari_amqp.so $(DESTDIR)$(MODULES_DIR)
 	install -m 644 documentation/* $(DESTDIR)$(DOCUMENTATION_DIR)
 	install -D amqp.json /usr/share/asterisk/rest-api/amqp.json
+	cp /wazo-res-amqp/documentation/res_amqp_config-en_US.xml /usr/share/asterisk/documentation/thirdparty/
 	patch /usr/share/asterisk/rest-api/resources.json resources.json.patch
 
 	@echo " +-------- res_stasis_amqp installed --------+"
@@ -61,7 +62,7 @@ install-dev:
 	@echo " +-------- res_stasis_amqp headers installed --------+"
 
 uninstall:
-	rm /var/lib/asterisk/rest-api/amqp.json || true
+	rm /usr/share/asterisk/rest-api/amqp.json || true
 	patch -R /usr/share/asterisk/rest-api/resources.json resources.json.patch
 
 res_ari_amqp.so: res_ari_amqp.o resource_amqp.o
