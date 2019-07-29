@@ -47,6 +47,7 @@ install: $(TARGET)
 	install -m 644 res_ari_amqp.so $(DESTDIR)$(MODULES_DIR)
 	install -m 644 documentation/* $(DESTDIR)$(DOCUMENTATION_DIR)
 	install -D amqp.json $(REST_DIR)/amqp.json
+	cp /wazo-res-amqp/documentation/res_amqp_config-en_US.xml $(DESTDIR)$(DOCUMENTATION_DIR)
 	patch $(REST_DIR)/resources.json resources.json.patch
 
 	@echo " +-------- res_stasis_amqp installed --------+"
