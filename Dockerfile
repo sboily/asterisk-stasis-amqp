@@ -30,7 +30,7 @@ RUN cd wazo-res-amqp && \
 
 RUN git clone --single-branch --branch WAZO-939-Stasis-Event-Forwarding https://github.com/wazo-pbx/wazo-res-stasis-amqp.git
 RUN cd wazo-res-stasis-amqp && \
-    make DOCDIR=/usr/share/asterisk/documentation/thirdparty && \
+    make DOCDIR=/usr/share/asterisk && \
     make install
 
 EXPOSE 2000 5038 5060/udp

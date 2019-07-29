@@ -17,8 +17,8 @@ ifeq ($(strip $(DOCDIR)),)
 	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)/var/lib/asterisk/documentation/thirdparty
 	REST_DIR:=$(INSTALL_PREFIX)/var/lib/asterisk/rest-api
 else
-	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)$(DOCDIR)
-	REST_DIR:=$(INSTALL_PREFIX)/usr/share/asterisk/rest-api
+	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)$(DOCDIR)/documentation/thirdparty
+	REST_DIR:=$(INSTALL_PREFIX)$(DOCDIR)/rest-api
 endif
 INSTALL = install
 ASTETCDIR = $(INSTALL_PREFIX)/etc/asterisk
