@@ -493,7 +493,7 @@ int ast_subscribe_to_stasis(const char *app_name)
 {
 	int res = 0;
 	ast_debug(1, "called subscribe to stasis for application: '%s'\n", app_name);
-	res = stasis_app_register_all(app_name, &stasis_amqp_message_handler, NULL);
+	res = stasis_app_register(app_name, &stasis_amqp_message_handler, NULL);
 	return res;
 }
 
