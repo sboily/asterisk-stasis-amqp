@@ -15,8 +15,10 @@ else
 endif
 ifeq ($(strip $(DOCDIR)),)
 	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)/var/lib/asterisk/documentation/thirdparty
+	REST_DIR:=$(INSTALL_PREFIX)/var/lib/asterisk/rest-api
 else
 	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)$(DOCDIR)
+	REST_DIR:=$(INSTALL_PREFIX)/usr/share/asterisk/rest-api
 endif
 INSTALL = install
 ASTETCDIR = $(INSTALL_PREFIX)/etc/asterisk
@@ -44,9 +46,8 @@ install: $(TARGET)
 	install -m 644 $(TARGET) $(DESTDIR)$(MODULES_DIR)
 	install -m 644 res_ari_amqp.so $(DESTDIR)$(MODULES_DIR)
 	install -m 644 documentation/* $(DESTDIR)$(DOCUMENTATION_DIR)
-	install -D amqp.json /var/lib/asterisk/rest-api/amqp.json
-	cp /wazo-res-amqp/documentation/res_amqp_config-en_US.xml /var/lib/asterisk/documentation/thirdparty/
-	patch /var/lib/asterisk/rest-api/resources.json resources.json.patch
+	install -D amqp.json $(REST_DIR)/amqp.json
+	patch $(REST_DIR)/resources.json resources.json.patch
 
 	@echo " +-------- res_stasis_amqp installed --------+"
 	@echo " +                                           +"
@@ -62,8 +63,8 @@ install-dev:
 	@echo " +-------- res_stasis_amqp headers installed --------+"
 
 uninstall:
-	rm /var/lib/asterisk/rest-api/amqp.json || true
-	patch -R /var/lib/asterisk/rest-api/resources.json resources.json.patch
+	rm $(REST_DIR)/amqp.json || true
+	patch -R $(REST_DIR)/resources.json resources.json.patch
 
 res_ari_amqp.so: res_ari_amqp.o resource_amqp.o
 	$(CC) $(LDFLAGS)  -o $@ $^ $(LIBS)
