@@ -45,7 +45,8 @@ install: $(TARGET)
 	install -m 644 res_ari_amqp.so $(DESTDIR)$(MODULES_DIR)
 	install -m 644 documentation/* $(DESTDIR)$(DOCUMENTATION_DIR)
 	install -D amqp.json /var/lib/asterisk/rest-api/amqp.json
-	patch /var/lib/asterisk/rest-api/resources.json resources.json.patch
+	cp -a /usr/share/asterisk/documentation/thirdparty /var/lib/asterisk/documentation/thirdparty
+	patch /usr/share/asterisk/rest-api/resources.json resources.json.patch
 
 	@echo " +-------- res_stasis_amqp installed --------+"
 	@echo " +                                           +"
