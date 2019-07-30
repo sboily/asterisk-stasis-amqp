@@ -484,6 +484,11 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 	}
 
 	ast_debug(3, "publishing with routing key: '%s'\n", routing_key);
+
+	if (ast_json_object_set(message, "application", ast_json_string_create(app_name))) {
+		ast_log(LOG_ERROR, "unable to set application item in json");
+	}
+
 	publish_to_amqp(routing_key, "stasis_app", NULL, message);
 
 	return;
