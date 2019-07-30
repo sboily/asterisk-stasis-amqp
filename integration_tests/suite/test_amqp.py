@@ -106,22 +106,6 @@ def test_stasis_amqp_events_bad_endpoint(ari):
 
     until.assert_(event_received, events, real_app, timeout=5)
 
-def test_stasis_amqp_events_bad_app(ari):
-    assert_that(ari.applications.list(), empty())
-
-    bus_client = BusClient.from_connection_fields(port=AssetLauncher.service_port(5672, 'rabbitmq'))
-
-    assert bus_client.is_up()
-
-    events = bus_client.accumulator("stasis.app." + subscribe_args[app_name_key].lower())
-
-    ari.channels.originate(endpoint='local/3000@default', app=subscribe_args[app_name_key])
-
-    def event_received(events, app):
-        assert_that(events.accumulate(), empty())
-
-    until.assert_(event_received, events, subscribe_args[app_name_key], timeout=5)
-
 def test_stasis_amqp_events_bad_routing(ari):
     real_app = 'A'
     parasite_app = 'B'
@@ -142,18 +126,6 @@ def test_stasis_amqp_events_bad_routing(ari):
     until.assert_(event_received, events, subscribe_args[app_name_key], timeout=5)
 
 def test_app_subscribe(ari):
-    assert_that(
-        calling(ari.amqp.stasisSubscribe).with_args(**subscribe_args),
-            not_(raises(Exception))
-    )
-
-    assert_that(ari.applications.list(), has_item(has_entry('name', subscribe_args[app_name_key])))
-
-def test_app_subscribe_double(ari):
-    ari.amqp.stasisSubscribe(**subscribe_args)
-
-    assert_that(ari.applications.list(), has_item(has_entry('name', subscribe_args[app_name_key])))
-
     assert_that(
         calling(ari.amqp.stasisSubscribe).with_args(**subscribe_args),
             not_(raises(Exception))
