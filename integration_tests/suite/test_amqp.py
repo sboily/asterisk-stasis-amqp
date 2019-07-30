@@ -13,6 +13,7 @@ from xivo_test_helpers.bus import BusClient
 from xivo_test_helpers.asset_launching_test_case import AssetLaunchingTestCase
 from xivo_test_helpers.hamcrest.raises import raises
 from functools import partial
+from pprint import pprint
 
 import time
 
@@ -37,30 +38,43 @@ def ari():
     AssetLauncher.launch_service_with_asset()
     ari_url = 'http://localhost:{port}'.format(port=AssetLauncher.service_port(5039, 'ari_amqp'))
     ari = until.return_(ari_client.connect, ari_url, 'wazo', 'wazo', timeout=5, interval=0.1)
+
+    # necessary because RabbitMQ starts much more slowly, so module fails to load automatically
     AssetLauncher.docker_exec(["asterisk", "-rx", "module load res_stasis_amqp.so"], service_name='ari_amqp')
     AssetLauncher.docker_exec(["asterisk", "-rx", "module load res_ari_amqp.so"], service_name='ari_amqp')
     yield ari
     AssetLauncher.kill_containers()
 
 def test_stasis_amqp_events(ari):
-    ari.amqp.stasisSubscribe(**subscribe_args)
-    assert_that(ari.applications.list(), has_item(has_entry('name', subscribe_args[app_name_key])))
+    real_app = 'A'
+    parasite_app = 'B'
+    ari.amqp.stasisSubscribe(applicationName=real_app)
+    ari.amqp.stasisSubscribe(applicationName=parasite_app)
+
+    assert_that(ari.applications.list(), has_item(has_entry('name', real_app)))
+    assert_that(ari.applications.list(), has_item(has_entry('name', parasite_app)))
 
     bus_client = BusClient.from_connection_fields(port=AssetLauncher.service_port(5672, 'rabbitmq'))
 
     assert bus_client.is_up()
 
-    events = bus_client.accumulator("stasis.app." + subscribe_args[app_name_key].lower())
+    events = bus_client.accumulator("stasis.app." + real_app.lower())
 
-    ari.channels.originate(endpoint='local/3000@default', extension=subscribe_args[app_name_key])
+    parasite_events = bus_client.accumulator("stasis.app." + parasite_app.lower())  # routing keys are all lowercase
+
+    ari.channels.originate(endpoint='local/3000@default', app=real_app)
+    ari.channels.originate(endpoint='local/3000@default', app=parasite_app)
 
     def event_received(events, app):
-        assert_that(events.accumulate(), has_item(
-            has_entry('data',
-                has_entry('application', app)
-            )
+        assert_that(events.accumulate(), only_contains(
+            has_entry('application', app)
         ))
-    until.assert_(event_received, events, subscribe_args[app_name_key], timeout=50)
+
+        assert_that(parasite_events.accumulate(), only_contains(
+            has_entry('application', is_not(app))
+        ))
+
+    until.assert_(event_received, events, real_app, timeout=5)
 
 def test_app_subscribe(ari):
     assert_that(
