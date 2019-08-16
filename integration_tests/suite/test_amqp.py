@@ -110,7 +110,7 @@ def test_stasis_amqp_events_bad_routing(ari):
 def test_app_subscribe(ari):
     assert_that(
         calling(ari.amqp.stasisSubscribe).with_args(**subscribe_args),
-            not_(raises(Exception))
+        not_(raises(Exception))
     )
 
     assert_that(ari.applications.list(), has_item(has_entry('name', subscribe_args[app_name_key])))
@@ -122,5 +122,5 @@ def test_app_unsubscribe(ari):
     ari.amqp.stasisSubscribe(**subscribe_args)
     assert_that(
         calling(ari.amqp.stasisUnsubscribe).with_args(**subscribe_args),
-            not_(raises(Exception))
+        not_(raises(Exception))
     )

@@ -340,10 +340,8 @@ static int publish_to_amqp(const char *topic, const char *name, struct ast_json 
 	int res;
 
 	if (!name) {
-		if ((msg = ast_json_dump_string(body)) == NULL) {
-			ast_log(LOG_ERROR, "failed to convert json to string\n");
-			return -1;
-		}
+		ast_debug(3, "no name was specified\n");
+		return -1;
 	}
 
 	if ((json_name = ast_json_string_create(name)) == NULL) {
@@ -365,7 +363,6 @@ static int publish_to_amqp(const char *topic, const char *name, struct ast_json 
 		ast_log(LOG_ERROR, "failed to convert json to string\n");
 		return -1;
 	}
-
 	amqp_basic_properties_t props = {
 		._flags = AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CONTENT_TYPE_FLAG,
 		.delivery_mode = 2, /* persistent delivery mode */
@@ -391,6 +388,7 @@ static int publish_to_amqp(const char *topic, const char *name, struct ast_json 
 
 	return 0;
 }
+
 
 
 static int load_config(int reload)

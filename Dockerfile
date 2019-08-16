@@ -28,6 +28,6 @@ RUN cd wazo-res-stasis-amqp && \
     make && \
     make install DOCDIR=/usr/share/asterisk
 
-EXPOSE 2000 5038 5060/udp
+EXPOSE 2000 5038 5039 5060/udp
 
 CMD ["asterisk", "-dvf"]
