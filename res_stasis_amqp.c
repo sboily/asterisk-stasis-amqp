@@ -358,7 +358,7 @@ static int publish_to_amqp(const char *topic, const char *name, struct ast_json 
 	int res;
 
 	message_eid = eid_copy(eid != NULL ? eid : &ast_eid_default);
-	ast_eid_to_str(eid_str, sizeof(eid_str), message_eid)
+	ast_eid_to_str(eid_str, sizeof(eid_str), message_eid);
 	if (name) {
 		if ((json_eid = ast_json_string_create(eid_str)) == NULL) {
 			ast_log(LOG_ERROR, "failed to create json string\n");
