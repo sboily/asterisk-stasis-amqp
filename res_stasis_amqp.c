@@ -331,15 +331,40 @@ char *new_routing_key(const char *prefix, const char *suffix)
 	return routing_key;
 }
 
+struct ast_eid *eid_copy(const struct ast_eid *eid)
+{
+	struct ast_eid *new = NULL;
+	int i = 0;
+
+	if (!(new = ast_calloc(sizeof(*new), 1))) {
+		return NULL;
+	}
+
+	for (i = 0; i < 6; i++) {
+		new->eid[i] = eid->eid[i];
+	}
+	return new;
+}
+
 static int publish_to_amqp(const char *topic, const char *name, struct ast_json *body)
 {
 	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(char *, msg, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, json_msg, NULL, ast_json_free);
 	RAII_VAR(struct ast_json *, json_name, NULL, ast_json_unref);
+	RAII_VAR(struct ast_json *, json_eid, NULL, ast_json_unref);
+	RAII_VAR(struct ast_eid *, message_eid, NULL, ast_free);
+	char eid_str[128];
 	int res;
 
+	message_eid = eid_copy(eid != NULL ? eid : &ast_eid_default);
+	ast_eid_to_str(eid_str, sizeof(eid_str), message_eid)
 	if (name) {
+		if ((json_eid = ast_json_string_create(eid_str)) == NULL) {
+			ast_log(LOG_ERROR, "failed to create json string\n");
+			return -1;
+		}
+
 		if ((json_name = ast_json_string_create(name)) == NULL) {
 			ast_log(LOG_ERROR, "failed to create json string\n");
 			return -1;
@@ -352,6 +377,16 @@ static int publish_to_amqp(const char *topic, const char *name, struct ast_json 
 
 		if (ast_json_object_set(json_msg, "event", json_name)) {
 			ast_log(LOG_ERROR, "failed to set event name\n");
+			return -1;
+		}
+
+		if (ast_json_object_set(json_msg, "eid", json_eid)) {
+			ast_log(LOG_ERROR, "failed to set event eid\n");
+			return -1;
+		}
+
+		if (ast_json_object_set(json_msg, "data", body)) {
+			ast_log(LOG_ERROR, "failed to set event data\n");
 			return -1;
 		}
 
