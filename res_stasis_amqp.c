@@ -651,58 +651,6 @@ int register_to_new_stasis_app(const void *data)
 	return res;
 }
 
-static int load_module(void)
-{
-	if (!ast_module_check("res_amqp.so")) {
-		if (ast_load_resource("res_amqp.so") != AST_MODULE_LOAD_SUCCESS) {
-			ast_log(LOG_ERROR, "Cannot load res_amqp, so res_stasis_amqp cannot be loaded\n");
-			return AST_MODULE_LOAD_DECLINE;
-		}
-	}
-
-	if (load_config(0) != 0) {
-		ast_log(LOG_WARNING, "Configuration failed to load\n");
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
-	registered_apps = ao2_container_alloc(0, NULL, app_cmp);
-
-	/* Subscription to receive all of the messages from manager topic */
-	manager = stasis_subscribe(ast_manager_get_topic(), send_ami_event_to_amqp, NULL);
-	if (!manager) {
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
-	/* Subscription to receive all of the messages from channel topic */
-	sub = stasis_subscribe(ast_channel_topic_all(), send_channel_event_to_amqp, NULL);
-	if (!sub) {
-		/* unsubscribe from manager */
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
-	if (!(stasis_app_sched_context = ast_sched_context_create())) {
-		ast_log(LOG_ERROR, "failed to create scheduler context\n");
-		/* unsubscribe from manager and sub */
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
-	if (ast_sched_start_thread(stasis_app_sched_context)) {
-		ast_log(LOG_ERROR, "failed to start scheduler thread\n");
-		/* unsubscribe from manager and sub */
-		/* destroy context */
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
-	if (ast_sched_add(stasis_app_sched_context, 1000, register_to_new_stasis_app, NULL) == -1) {
-		ast_log(LOG_ERROR, "failed to reschedule the stasis app registration\n");
-		/* unsubscribe from manager and sub */
-		/* descroy context */
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
-	return AST_MODULE_LOAD_SUCCESS;
-}
-
 int ast_subscribe_to_stasis(const char *app_name)
 {
 	int res = 0;
@@ -723,6 +671,35 @@ int ast_unsubscribe_from_stasis(const char *app_name)
 	stasis_app_unregister(app_name);
 
 	return 0;
+}
+
+static int load_module(void)
+{
+	if (load_config(0) != 0) {
+		ast_log(LOG_WARNING, "Configuration failed to load\n");
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	/* Subscription to receive all of the messages from manager topic */
+	manager = stasis_subscribe(ast_manager_get_topic(), send_ami_event_to_amqp, NULL);
+	if (!manager) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	if (!(stasis_app_sched_context = ast_sched_context_create())) {
+		ast_log(LOG_ERROR, "failed to create scheduler context\n");
+		/* unsubscribe from manager and sub */
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	if (ast_sched_start_thread(stasis_app_sched_context)) {
+		ast_log(LOG_ERROR, "failed to start scheduler thread\n");
+		/* unsubscribe from manager and sub */
+		/* destroy context */
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	return AST_MODULE_LOAD_SUCCESS;
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_ORDER, "Send all Stasis messages to AMQP",
