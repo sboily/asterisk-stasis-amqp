@@ -337,7 +337,7 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 		ast_log(LOG_ERROR, "unable to set application item in json");
 	}
 
-	publish_to_amqp(routing_key, NULL, message);
+	publish_to_amqp(routing_key, NULL, NULL, message);
 
 	return;
 }
