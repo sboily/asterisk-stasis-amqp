@@ -8,6 +8,8 @@
 #
 
 ASTLIBDIR:=$(shell awk '/moddir/{print $$3}' /etc/asterisk/asterisk.conf 2> /dev/null)
+DOCDIR:=$(shell awk '/astdatadir/{print $$3}' /etc/asterisk/asterisk.conf 2> /dev/null)
+
 ifeq ($(strip $(ASTLIBDIR)),)
 	MODULES_DIR:=$(INSTALL_PREFIX)/usr/lib/asterisk/modules
 else

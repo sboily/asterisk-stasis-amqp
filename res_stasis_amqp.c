@@ -339,34 +339,32 @@ static int publish_to_amqp(const char *topic, const char *name, struct ast_json 
 	RAII_VAR(struct ast_json *, json_name, NULL, ast_json_unref);
 	int res;
 
-	if (name) {
-		if ((json_name = ast_json_string_create(name)) == NULL) {
-			ast_log(LOG_ERROR, "failed to create json string\n");
-			return -1;
-		}
-
-		if ((json_msg = ast_json_object_create()) == NULL) {
-			ast_log(LOG_ERROR, "failed to create json object\n");
-			return -1;
-		}
-
-		if (ast_json_object_set(json_msg, "event", json_name)) {
-			ast_log(LOG_ERROR, "failed to set event name\n");
-			return -1;
-		}
-
-		if ((msg = ast_json_dump_string(json_msg)) == NULL) {
-			ast_log(LOG_ERROR, "failed to convert json to string\n");
-			return -1;
-		}
-	} else {
+	if (!name) {
 		if ((msg = ast_json_dump_string(body)) == NULL) {
 			ast_log(LOG_ERROR, "failed to convert json to string\n");
 			return -1;
 		}
 	}
 
+	if ((json_name = ast_json_string_create(name)) == NULL) {
+		ast_log(LOG_ERROR, "failed to create json string\n");
+		return -1;
+	}
 
+	if ((json_msg = ast_json_object_create()) == NULL) {
+		ast_log(LOG_ERROR, "failed to create json object\n");
+		return -1;
+	}
+
+	if (ast_json_object_set(json_msg, "event", json_name)) {
+		ast_log(LOG_ERROR, "failed to set event name\n");
+		return -1;
+	}
+
+	if ((msg = ast_json_dump_string(json_msg)) == NULL) {
+		ast_log(LOG_ERROR, "failed to convert json to string\n");
+		return -1;
+	}
 
 	amqp_basic_properties_t props = {
 		._flags = AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CONTENT_TYPE_FLAG,

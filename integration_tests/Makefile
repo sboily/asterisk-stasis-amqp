@@ -1,6 +1,6 @@
 test-setup:
 	docker pull wazopbx/wait
-	docker pull wazopbx/asterisk
+	docker build -t asterisk_amqp ..
 	docker pull rabbitmq
 
 test:

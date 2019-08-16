@@ -16,16 +16,12 @@ RUN apt-get -q update && apt-get -q -y install \
     gcc \
     g++ \
     asterisk \
-    libedit-dev
+    libedit-dev \
+    wazo-res-amqp
 
 RUN  apt-get install --assume-yes openssl libxml2-dev libncurses5-dev uuid-dev sqlite3 libsqlite3-dev pkg-config libjansson-dev
 
 RUN apt-get install --assume-yes asterisk-dev wazo-res-amqp-dev librabbitmq-dev
-
-RUN git clone --single-branch --branch WAZO-939-Stasis-Event-Forwarding https://github.com/wazo-pbx/wazo-res-amqp.git
-RUN cd wazo-res-amqp && \
-    make && \
-    make install DOCDIR=/usr/share/asterisk/documentation/thirdparty
 
 RUN git clone --single-branch --branch WAZO-939-Stasis-Event-Forwarding https://github.com/wazo-pbx/wazo-res-stasis-amqp.git
 RUN cd wazo-res-stasis-amqp && \
