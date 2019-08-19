@@ -256,26 +256,6 @@ static int setup_amqp(void)
 	return 0;
 }
 
-/*!
- * \brief Subscription callback for all channel messages.
- * \param data Data pointer given when creating the subscription.
- * \param sub This subscription.
- * \param topic The topic the message was posted to. This is not necessarily the
- *              topic you subscribed to, since messages may be forwarded between
- *              topics.
- * \param message The message itself.
- */
-static void send_channel_event_to_amqp(void *data, struct stasis_subscription *sub,
-	struct stasis_message *message)
-{
-	if (stasis_subscription_final_message(sub, message)) {
-		return;
-	}
-
-	stasis_amqp_channel_log(message);
-
-}
-
 static int manager_event_to_json(struct ast_json *json, const char *event_name, char *fields)
 {
 	struct ast_json *json_value = NULL;
@@ -337,7 +317,7 @@ static void stasis_amqp_message_handler(void *data, const char *app_name, struct
 		ast_log(LOG_ERROR, "unable to set application item in json");
 	}
 
-	publish_to_amqp(routing_key, NULL, NULL, message);
+	publish_to_amqp(routing_key, "stasis_app", NULL, message);
 
 	return;
 }
@@ -417,43 +397,6 @@ char *new_routing_key(const char *prefix, const char *suffix)
 	return routing_key;
 }
 
-/*!
- * \brief Channel handler for AMQP.
- *
- * \param message to Log.
- * \return 0 on success.
- * \return -1 on error.
- */
-static int stasis_amqp_channel_log(struct stasis_message *message)
-{
-	RAII_VAR(struct ast_json *, json, NULL, ast_json_free);
-	RAII_VAR(struct ast_json *, channel, NULL, ast_json_free);
-	RAII_VAR(struct ast_json *, unique_id, NULL, ast_json_free);
-	RAII_VAR(char *, routing_key, NULL, ast_free);
-	const char *routing_key_prefix = "stasis.channel";
-
-	if (!(json = stasis_message_to_json(message, NULL))) {
-		return -1;
-	}
-
-	if (!(channel = ast_json_object_get(json, "channel"))) {
-		return -1;
-	}
-
-
-	if (!(unique_id = ast_json_object_get(channel, "id"))) {
-		return -1;
-	}
-
-	if (!(routing_key = new_routing_key(routing_key_prefix, ast_json_string_get(unique_id)))) {
-		return -1;
-	}
-
-	publish_to_amqp(routing_key, "stasis_channel", stasis_message_eid(message), json);
-
-	return 0;
-}
-
 struct ast_eid *eid_copy(const struct ast_eid *eid)
 {
 	struct ast_eid *new = NULL;
@@ -485,12 +428,12 @@ static int publish_to_amqp(const char *topic, const char *name, const struct ast
 
 	if (!name) {
 		if ((json_eid = ast_json_string_create(eid_str)) == NULL) {
-			ast_log(LOG_ERROR, "failed to create json string\n");
+			ast_log(LOG_ERROR, "failed to create json string for eid\n");
 			return -1;
 		}
 
 		if ((json_name = ast_json_string_create(name)) == NULL) {
-			ast_log(LOG_ERROR, "failed to create json string\n");
+			ast_log(LOG_ERROR, "failed to create json string for name\n");
 			return -1;
 		}
 
