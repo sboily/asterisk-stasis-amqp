@@ -256,6 +256,26 @@ static int setup_amqp(void)
 	return 0;
 }
 
+/*!
+ * \brief Subscription callback for all channel messages.
+ * \param data Data pointer given when creating the subscription.
+ * \param sub This subscription.
+ * \param topic The topic the message was posted to. This is not necessarily the
+ *              topic you subscribed to, since messages may be forwarded between
+ *              topics.
+ * \param message The message itself.
+ */
+static void send_channel_event_to_amqp(void *data, struct stasis_subscription *sub,
+	struct stasis_message *message)
+{
+	if (stasis_subscription_final_message(sub, message)) {
+		return;
+	}
+
+	stasis_amqp_channel_log(message);
+
+}
+
 static int manager_event_to_json(struct ast_json *json, const char *event_name, char *fields)
 {
 	struct ast_json *json_value = NULL;
@@ -395,6 +415,43 @@ char *new_routing_key(const char *prefix, const char *suffix)
 	}
 
 	return routing_key;
+}
+
+/*!
+ * \brief Channel handler for AMQP.
+ *
+ * \param message to Log.
+ * \return 0 on success.
+ * \return -1 on error.
+ */
+static int stasis_amqp_channel_log(struct stasis_message *message)
+{
+	RAII_VAR(struct ast_json *, json, NULL, ast_json_free);
+	RAII_VAR(struct ast_json *, channel, NULL, ast_json_free);
+	RAII_VAR(struct ast_json *, unique_id, NULL, ast_json_free);
+	RAII_VAR(char *, routing_key, NULL, ast_free);
+	const char *routing_key_prefix = "stasis.channel";
+
+	if (!(json = stasis_message_to_json(message, NULL))) {
+		return -1;
+	}
+
+	if (!(channel = ast_json_object_get(json, "channel"))) {
+		return -1;
+	}
+
+
+	if (!(unique_id = ast_json_object_get(channel, "id"))) {
+		return -1;
+	}
+
+	if (!(routing_key = new_routing_key(routing_key_prefix, ast_json_string_get(unique_id)))) {
+		return -1;
+	}
+
+	publish_to_amqp(routing_key, "stasis_channel", stasis_message_eid(message), json);
+
+	return 0;
 }
 
 struct ast_eid *eid_copy(const struct ast_eid *eid)
@@ -632,6 +689,13 @@ static int load_module(void)
 	if (!(stasis_app_sched_context = ast_sched_context_create())) {
 		ast_log(LOG_ERROR, "failed to create scheduler context\n");
 		/* unsubscribe from manager and sub */
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	/* Subscription to receive all of the messages from channel topic */
+	sub = stasis_subscribe(ast_channel_topic_all(), send_channel_event_to_amqp, NULL);
+	if (!sub) {
+		/* unsubscribe from manager */
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
