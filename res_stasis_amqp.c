@@ -72,6 +72,7 @@
 
 #include "asterisk/module.h"
 #include "asterisk/stasis.h"
+#include "asterisk/stasis_amqp.h"
 #include "asterisk/stasis_channels.h"
 #include "asterisk/stasis_app.h"
 #include "asterisk/stasis_message_router.h"
