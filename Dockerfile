@@ -23,8 +23,8 @@ RUN  apt-get install --assume-yes openssl libxml2-dev libncurses5-dev uuid-dev s
 
 RUN apt-get install --assume-yes asterisk-dev wazo-res-amqp-dev librabbitmq-dev
 
-RUN git clone --single-branch --branch WAZO-939-Stasis-Event-Forwarding https://github.com/wazo-pbx/wazo-res-stasis-amqp.git
-RUN cd wazo-res-stasis-amqp && \
+COPY . /usr/src/wazo-res-stasis-amqp
+RUN cd /usr/src/wazo-res-stasis-amqp && \
     make && \
     make install DOCDIR=/usr/share/asterisk
 
