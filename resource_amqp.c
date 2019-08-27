@@ -50,22 +50,3 @@ void ast_ari_amqp_stasis_subscribe(struct ast_variable *headers,
 	}
 	ast_ari_response_no_content(response);
 }
-
-void ast_ari_amqp_stasis_unsubscribe(struct ast_variable *headers,
-	struct ast_ari_amqp_stasis_unsubscribe_args *args,
-	struct ast_ari_response *response)
-{
-	const char *app_name = args->application_name;
-
-	if (!app_name) {
-		ast_ari_response_error(response, 400, "Invalid argument", "No application specified");
-		return;
-	}
-	int ret = ast_unsubscribe_from_stasis(app_name);
-	if (ret == -1) {
-		ast_ari_response_error(response, 404, "Application not found", "Application not found");
-		return;
-	}
-
-	ast_ari_response_no_content(response);
-}

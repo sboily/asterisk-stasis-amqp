@@ -660,20 +660,6 @@ int ast_subscribe_to_stasis(const char *app_name)
 	return res;
 }
 
-int ast_unsubscribe_from_stasis(const char *app_name)
-{
-	ast_debug(3, "called unsubscribe from stasis\n");
-	struct stasis_app *app = stasis_app_get_by_name(app_name);
-
-	if (!app) {
-		return -1;
-	}
-
-	stasis_app_unregister(app_name);
-
-	return 0;
-}
-
 static int load_module(void)
 {
 	if (load_config(0) != 0) {

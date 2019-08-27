@@ -40,7 +40,6 @@
 #include "asterisk/ari.h"
 
 int ast_subscribe_to_stasis(const char *app_name);
-int ast_unsubscribe_from_stasis(const char *app_name);
 
 /*! Argument struct for ast_ari_amqp_stasis_subscribe() */
 struct ast_ari_amqp_stasis_subscribe_args {
@@ -62,15 +61,5 @@ struct ast_ari_amqp_stasis_unsubscribe_args {
 	/*! Application's name */
 	const char *application_name;
 };
-/*!
- * \brief Remove a stasis subscription to AMQP.
- *
- * Remove an internal Stasis application and its associated subscription.
- *
- * \param headers HTTP headers
- * \param args Swagger parameters
- * \param[out] response HTTP response
- */
-void ast_ari_amqp_stasis_unsubscribe(struct ast_variable *headers, struct ast_ari_amqp_stasis_unsubscribe_args *args, struct ast_ari_response *response);
 
 #endif /* _ASTERISK_RESOURCE_AMQP_H */

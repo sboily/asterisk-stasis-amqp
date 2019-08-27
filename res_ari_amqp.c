@@ -108,64 +108,6 @@ static void ast_ari_amqp_stasis_subscribe_cb(
 fin: __attribute__((unused))
 	return;
 }
-/*!
- * \brief Parameter parsing callback for /amqp/{applicationName}.
- * \param get_params GET parameters in the HTTP request.
- * \param path_vars Path variables extracted from the request.
- * \param headers HTTP headers.
- * \param[out] response Response to the HTTP request.
- */
-static void ast_ari_amqp_stasis_unsubscribe_cb(
-	struct ast_tcptls_session_instance *ser,
-	struct ast_variable *get_params, struct ast_variable *path_vars,
-	struct ast_variable *headers, struct ast_json *body, struct ast_ari_response *response)
-{
-	struct ast_ari_amqp_stasis_unsubscribe_args args = {};
-	struct ast_variable *i;
-#if defined(AST_DEVMODE)
-	int is_valid;
-	int code;
-#endif /* AST_DEVMODE */
-
-	for (i = path_vars; i; i = i->next) {
-		if (strcmp(i->name, "applicationName") == 0) {
-			args.application_name = (i->value);
-		} else
-		{}
-	}
-	ast_ari_amqp_stasis_unsubscribe(headers, &args, response);
-#if defined(AST_DEVMODE)
-	code = response->response_code;
-
-	switch (code) {
-	case 0: /* Implementation is still a stub, or the code wasn't set */
-		is_valid = response->message == NULL;
-		break;
-	case 500: /* Internal Server Error */
-	case 501: /* Not Implemented */
-	case 400: /* Bad request. */
-		is_valid = 1;
-		break;
-	default:
-		if (200 <= code && code <= 299) {
-			is_valid = ast_ari_validate_application(
-				response->message);
-		} else {
-			ast_log(LOG_ERROR, "Invalid error response %d for /amqp/{applicationName}\n", code);
-			is_valid = 0;
-		}
-	}
-
-	if (!is_valid) {
-		ast_log(LOG_ERROR, "Response validation failed for /amqp/{applicationName}\n");
-		ast_ari_response_error(response, 500,
-			"Internal Server Error", "Response validation failed");
-	}
-#endif /* AST_DEVMODE */
-
-fin: __attribute__((unused))
-	return;
-}
 
 /*! \brief REST handler for /api-docs/amqp.json */
 static struct stasis_rest_handlers amqp_applicationName = {
@@ -173,7 +115,6 @@ static struct stasis_rest_handlers amqp_applicationName = {
 	.is_wildcard = 1,
 	.callbacks = {
 		[AST_HTTP_POST] = ast_ari_amqp_stasis_subscribe_cb,
-		[AST_HTTP_DELETE] = ast_ari_amqp_stasis_unsubscribe_cb,
 	},
 	.num_children = 0,
 	.children = {  }
