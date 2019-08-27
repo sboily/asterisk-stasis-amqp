@@ -33,29 +33,6 @@
 							"reason": "Bad request."
 						}
 					]
-				},
-				{
-					"httpMethod": "DELETE",
-					"summary": "Remove a stasis subscription to AMQP.",
-					"notes": "Remove an internal Stasis application and its associated subscription.",
-					"nickname": "stasisUnsubscribe",
-					"responseClass": "Application",
-					"parameters": [
-						{
-							"name": "applicationName",
-							"description": "Application's name",
-							"paramType": "path",
-							"required": true,
-							"allowMultiple": false,
-							"dataType": "string"
-						}
-					],
-					"errorResponses": [
-						{
-							"code": 400,
-							"reason": "Bad request."
-						}
-					]
 				}
 			]
 		}
