@@ -54,6 +54,7 @@ Please restart asterisk before loading res_stasis_amqp.so for the documentation.
 
 To load module
 
+    CLI> module load res_ari_amqp.so
     CLI> module load res_stasis_amqp.so
 
 How to use
