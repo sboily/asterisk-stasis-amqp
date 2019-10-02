@@ -1,4 +1,4 @@
-wazo-res-stasis-amqp (0.0.2-7) wazo-dev-stretch; urgency=medium
+wazo-res-stasis-amqp (0.0.3) wazo-dev-stretch; urgency=medium
 
   * update for asterisk 16
 
