@@ -126,6 +126,7 @@ def test_app_subscribe(ari):
     assert_that(ari.applications.list(), has_item(has_entry('name', subscribe_args[app_name_key])))
 
 
+@pytest.mark.skip(reason='not implemented')
 def test_app_unsubscribe(ari):
     """
     Test passes, but operation does not work for now; a tiny Asterisk patch is required.
