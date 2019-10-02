@@ -1,6 +1,6 @@
 #
 # Makefile for Asterisk stasis to amqp resource
-# Copyright (C) 2017, Sylvain Boily
+# Copyright 2017-2019 The Wazo Authors  (see the AUTHORS file)
 #
 # This program is free software, distributed under the terms of
 # the GNU General Public License Version 3. See the COPYING file
@@ -8,19 +8,15 @@
 #
 
 ASTLIBDIR:=$(shell awk '/moddir/{print $$3}' /etc/asterisk/asterisk.conf 2> /dev/null)
-DOCDIR:=$(shell awk '/astdatadir/{print $$3}' /etc/asterisk/asterisk.conf 2> /dev/null)
-
 ifeq ($(strip $(ASTLIBDIR)),)
 	MODULES_DIR:=$(INSTALL_PREFIX)/usr/lib/asterisk/modules
 else
 	MODULES_DIR:=$(INSTALL_PREFIX)$(ASTLIBDIR)
 endif
 ifeq ($(strip $(DOCDIR)),)
-	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)/var/lib/asterisk/documentation/thirdparty
-	REST_DIR:=$(INSTALL_PREFIX)/var/lib/asterisk/rest-api
+	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)/usr/share/asterisk/documentation/thirdparty
 else
-	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)$(DOCDIR)/documentation/thirdparty
-	REST_DIR:=$(INSTALL_PREFIX)$(DOCDIR)/rest-api
+	DOCUMENTATION_DIR:=$(INSTALL_PREFIX)$(DOCDIR)
 endif
 INSTALL = install
 ASTETCDIR = $(INSTALL_PREFIX)/etc/asterisk
@@ -37,20 +33,17 @@ LDFLAGS = -Wall -shared
 
 .PHONY: install clean
 
-$(TARGET): $(OBJECTS) res_ari_amqp.so
+$(TARGET): $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) -o $@ $(LIBS)
 
 %.o: %.c $(HEADERS)
 	$(CC) -c $(CFLAGS) -o $@ $<
+
 install: $(TARGET)
 	mkdir -p $(DESTDIR)$(MODULES_DIR)
 	mkdir -p $(DESTDIR)$(DOCUMENTATION_DIR)
 	install -m 644 $(TARGET) $(DESTDIR)$(MODULES_DIR)
-	install -m 644 res_ari_amqp.so $(DESTDIR)$(MODULES_DIR)
 	install -m 644 documentation/* $(DESTDIR)$(DOCUMENTATION_DIR)
-	install -D amqp.json $(REST_DIR)/amqp.json
-	patch $(REST_DIR)/resources.json resources.json.patch
-
 	@echo " +-------- res_stasis_amqp installed --------+"
 	@echo " +                                           +"
 	@echo " + res_amqp has successfully been installed  +"
@@ -60,20 +53,9 @@ install: $(TARGET)
 	@echo " +              make samples                 +"
 	@echo " +-------------------------------------------+"
 
-install-dev:
-	install -m 644 asterisk/stasis_amqp.h /usr/include/asterisk
-	@echo " +-------- res_stasis_amqp headers installed --------+"
-
-uninstall:
-	rm $(REST_DIR)/amqp.json || true
-	patch -R $(REST_DIR)/resources.json resources.json.patch
-
-res_ari_amqp.so: res_ari_amqp.o resource_amqp.o
-	$(CC) $(LDFLAGS)  -o $@ $^ $(LIBS)
-
-
 clean:
-	rm -f *.so *.o
+	rm -f $(OBJECTS)
+	rm -f $(TARGET)
 
 samples:
 	$(INSTALL) -m 644 $(SAMPLENAME) $(DESTDIR)$(ASTETCDIR)/$(CONFNAME)
