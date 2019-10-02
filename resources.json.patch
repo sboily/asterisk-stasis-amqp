@@ -1,0 +1,13 @@
+--- resources.json	2019-07-23 14:26:45.174417978 -0400
++++ resources_new.json	2019-07-23 14:54:08.419291658 -0400
+@@ -53,6 +53,10 @@
+ 		{
+ 			"path": "/api-docs/wazo.{format}",
+ 			"description": "Wazo resources"
++		},
++		{
++			"path": "/api-docs/amqp.{format}",
++			"description": "AMQP resources"
+ 		}
+ 	]
+ }

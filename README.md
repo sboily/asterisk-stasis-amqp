@@ -25,3 +25,7 @@ Events is push for:
 * channel in routing key `stasis.channel.<channel uniqueid>`
 * ari apps in routing key `stasis.app.<app name>`
 * ami in routing key `stasis.ami.<event name>`
+
+##### Missing
+
+* Unsubscribe from Stasis functionality not yet implemented.

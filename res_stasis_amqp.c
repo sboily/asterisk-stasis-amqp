@@ -72,6 +72,7 @@
 
 #include "asterisk/module.h"
 #include "asterisk/stasis.h"
+#include "asterisk/stasis_amqp.h"
 #include "asterisk/stasis_channels.h"
 #include "asterisk/stasis_app.h"
 #include "asterisk/stasis_message_router.h"
@@ -321,6 +322,28 @@ static int manager_event_to_json(struct ast_json *json, const char *event_name, 
 	return 0;
 }
 
+static void stasis_amqp_message_handler(void *data, const char *app_name, struct ast_json *message)
+{
+	ast_debug(4, "called stasis amqp handler for application: '%s'\n", app_name);
+	RAII_VAR(char *, routing_key, NULL, ast_free);
+	const char *routing_key_prefix = "stasis.app";
+
+	if (!(routing_key = new_routing_key(routing_key_prefix, app_name))) {
+		return;
+	}
+
+	ast_debug(3, "publishing with routing key: '%s'\n", routing_key);
+
+	if (ast_json_object_set(message, "application", ast_json_string_create(app_name))) {
+		ast_log(LOG_ERROR, "unable to set application item in json");
+	}
+
+	publish_to_amqp(routing_key, "stasis_app", NULL, message);
+
+	return;
+}
+
+
 /*!
  * \brief Subscription callback for all AMI messages.
  * \param data Data pointer given when creating the subscription.
@@ -460,39 +483,47 @@ static int publish_to_amqp(const char *topic, const char *name, const struct ast
 
 	message_eid = eid_copy(eid != NULL ? eid : &ast_eid_default);
 	ast_eid_to_str(eid_str, sizeof(eid_str), message_eid);
-	if ((json_eid = ast_json_string_create(eid_str)) == NULL) {
-		ast_log(LOG_ERROR, "failed to create json string\n");
-		return -1;
-	}
 
-	if ((json_name = ast_json_string_create(name)) == NULL) {
-		ast_log(LOG_ERROR, "failed to create json string\n");
-		return -1;
-	}
+	if (!name) {
+		if ((json_eid = ast_json_string_create(eid_str)) == NULL) {
+			ast_log(LOG_ERROR, "failed to create json string for eid\n");
+			return -1;
+		}
 
-	if ((json_msg = ast_json_object_create()) == NULL) {
-		ast_log(LOG_ERROR, "failed to create json object\n");
-		return -1;
-	}
+		if ((json_name = ast_json_string_create(name)) == NULL) {
+			ast_log(LOG_ERROR, "failed to create json string for name\n");
+			return -1;
+		}
 
-	if (ast_json_object_set(json_msg, "event", json_name)) {
-		ast_log(LOG_ERROR, "failed to set event name\n");
-		return -1;
-	}
+		if ((json_msg = ast_json_object_create()) == NULL) {
+			ast_log(LOG_ERROR, "failed to create json object\n");
+			return -1;
+		}
 
-	if (ast_json_object_set(json_msg, "eid", json_eid)) {
-		ast_log(LOG_ERROR, "failed to set event eid\n");
-		return -1;
-	}
+		if (ast_json_object_set(json_msg, "event", json_name)) {
+			ast_log(LOG_ERROR, "failed to set event name\n");
+			return -1;
+		}
 
-	if (ast_json_object_set(json_msg, "data", body)) {
-		ast_log(LOG_ERROR, "failed to set event data\n");
-		return -1;
-	}
+		if (ast_json_object_set(json_msg, "eid", json_eid)) {
+			ast_log(LOG_ERROR, "failed to set event eid\n");
+			return -1;
+		}
 
-	if ((msg = ast_json_dump_string(json_msg)) == NULL) {
-		ast_log(LOG_ERROR, "failed to convert json to string\n");
-		return -1;
+		if (ast_json_object_set(json_msg, "data", body)) {
+			ast_log(LOG_ERROR, "failed to set event data\n");
+			return -1;
+		}
+
+		if ((msg = ast_json_dump_string(json_msg)) == NULL) {
+			ast_log(LOG_ERROR, "failed to convert json to string\n");
+			return -1;
+		}
+	} else {
+		if ((msg = ast_json_dump_string(body)) == NULL) {
+			ast_log(LOG_ERROR, "failed to convert json to string\n");
+			return -1;
+		}
 	}
 
 	amqp_basic_properties_t props = {
@@ -621,25 +652,30 @@ int register_to_new_stasis_app(const void *data)
 	return res;
 }
 
+int ast_subscribe_to_stasis(const char *app_name)
+{
+	int res = 0;
+	ast_debug(1, "called subscribe to stasis for application: '%s'\n", app_name);
+	res = stasis_app_register(app_name, &stasis_amqp_message_handler, NULL);
+	return res;
+}
+
 static int load_module(void)
 {
-	if (!ast_module_check("res_amqp.so")) {
-		if (ast_load_resource("res_amqp.so") != AST_MODULE_LOAD_SUCCESS) {
-			ast_log(LOG_ERROR, "Cannot load res_amqp, so res_stasis_amqp cannot be loaded\n");
-			return AST_MODULE_LOAD_DECLINE;
-		}
-	}
-
 	if (load_config(0) != 0) {
 		ast_log(LOG_WARNING, "Configuration failed to load\n");
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	registered_apps = ao2_container_alloc(0, NULL, app_cmp);
-
 	/* Subscription to receive all of the messages from manager topic */
 	manager = stasis_subscribe(ast_manager_get_topic(), send_ami_event_to_amqp, NULL);
 	if (!manager) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	if (!(stasis_app_sched_context = ast_sched_context_create())) {
+		ast_log(LOG_ERROR, "failed to create scheduler context\n");
+		/* unsubscribe from manager and sub */
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -650,12 +686,6 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	if (!(stasis_app_sched_context = ast_sched_context_create())) {
-		ast_log(LOG_ERROR, "failed to create scheduler context\n");
-		/* unsubscribe from manager and sub */
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
 	if (ast_sched_start_thread(stasis_app_sched_context)) {
 		ast_log(LOG_ERROR, "failed to start scheduler thread\n");
 		/* unsubscribe from manager and sub */
@@ -663,18 +693,13 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	if (ast_sched_add(stasis_app_sched_context, 1000, register_to_new_stasis_app, NULL) == -1) {
-		ast_log(LOG_ERROR, "failed to reschedule the stasis app registration\n");
-		/* unsubscribe from manager and sub */
-		/* descroy context */
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Send all Stasis messages to AMQP",
-	.support_level = AST_MODULE_SUPPORT_EXTENDED,
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_ORDER, "Send all Stasis messages to AMQP",
+	.support_level = AST_MODULE_SUPPORT_CORE,
 	.load = load_module,
-	.unload = unload_module
+	.unload = unload_module,
+	.load_pri = AST_MODPRI_APP_DEPEND,
+	.requires = "res_stasis,res_amqp",
 );
