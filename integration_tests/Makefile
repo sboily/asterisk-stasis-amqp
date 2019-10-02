@@ -1,5 +1,5 @@
 test-setup:
-	docker pull debian:stretch
+	docker pull debian:buster
 	docker pull wazopbx/wait
 	docker build --no-cache -t asterisk_amqp ..
 	docker pull rabbitmq

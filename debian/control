@@ -11,7 +11,7 @@ Standards-Version: 3.9.6
 
 Package: wazo-res-stasis-amqp
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, asterisk (>= 8:16), wazo-res-amqp
+Depends: ${shlibs:Depends}, ${misc:Depends}, asterisk (>= 8:16.5.0-1~wazo6), wazo-res-amqp
 Description: AMQP module to publish stasis message to rabbitmq.
 
 Package: wazo-res-stasis-amqp-dbg
