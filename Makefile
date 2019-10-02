@@ -23,8 +23,7 @@ ASTETCDIR = $(INSTALL_PREFIX)/etc/asterisk
 SAMPLENAME = stasis_amqp.conf.sample
 CONFNAME = $(basename $(SAMPLENAME))
 
-TARGET = res_stasis_amqp.so
-OBJECTS = res_stasis_amqp.o
+TARGET = res_stasis_amqp.so res_ari_amqp.so
 CFLAGS += -I../asterisk-amqp
 CFLAGS += -DHAVE_STDINT_H=1
 CFLAGS += -Wall -Wextra -Wno-unused-parameter -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Winit-self -Wmissing-format-attribute \
@@ -33,16 +32,16 @@ LDFLAGS = -Wall -shared
 
 .PHONY: install clean
 
-$(TARGET): $(OBJECTS)
-	$(CC) $(LDFLAGS) $(OBJECTS) -o $@ $(LIBS)
+all: $(TARGET)
 
 %.o: %.c $(HEADERS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-install: $(TARGET)
+install: all
 	mkdir -p $(DESTDIR)$(MODULES_DIR)
 	mkdir -p $(DESTDIR)$(DOCUMENTATION_DIR)
-	install -m 644 $(TARGET) $(DESTDIR)$(MODULES_DIR)
+	install -m 644 res_stasis_amqp.so $(DESTDIR)$(MODULES_DIR)
+	install -m 644 res_ari_amqp.so $(DESTDIR)$(MODULES_DIR)
 	install -m 644 documentation/* $(DESTDIR)$(DOCUMENTATION_DIR)
 	@echo " +-------- res_stasis_amqp installed --------+"
 	@echo " +                                           +"
@@ -54,9 +53,14 @@ install: $(TARGET)
 	@echo " +-------------------------------------------+"
 
 clean:
-	rm -f $(OBJECTS)
 	rm -f $(TARGET)
 
 samples:
 	$(INSTALL) -m 644 $(SAMPLENAME) $(DESTDIR)$(ASTETCDIR)/$(CONFNAME)
 	@echo " ------- res_stasis_amqp config installed ---------"
+
+res_ari_amqp.so: res_ari_amqp.o resource_amqp.o
+	$(CC) $(LDFLAGS)  -o $@ $^ $(LIBS)
+
+res_stasis_amqp.so: res_stasis_amqp.o
+	$(CC) $(LDFLAGS)  -o $@ $^ $(LIBS)
