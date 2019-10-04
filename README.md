@@ -1,3 +1,10 @@
+# WARNING this repo is deprecated!
+
+Use https://github.com/wazo-platform/wazo-res-stasis-amqp
+
+-------------------------
+
+
 To build the module you will need the following dependencies
 
 * asterisk-dev
