@@ -1,7 +1,9 @@
 #! /bin/sh
 
 if [ "$1" = "remove" ]; then
-    systemctl daemon-reload || true
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+    fi
 fi
 
 #DEBHELPER#
