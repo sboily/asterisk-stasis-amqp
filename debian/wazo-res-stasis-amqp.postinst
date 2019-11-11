@@ -8,7 +8,7 @@ set -e
 case "$1" in
     configure)
         /usr/share/wazo-res-stasis-amqp/patch_ari_resources.sh
-        systemctl daemon-reload || true
+        systemctl --system daemon-reload >/dev/null || true
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
     ;;
