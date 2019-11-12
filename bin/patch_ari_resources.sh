@@ -6,7 +6,7 @@ set -e
 set -u  # fail if variable is undefined
 set -o pipefail  # fail if command before pipe fails
 
-RESOURCES_FILENAME="/var/lib/asterisk/rest-api/resources.json"
+RESOURCES_FILENAME="/usr/share/asterisk/rest-api/resources.json"
 
 if jq -r '.apis[] .path ' "${RESOURCES_FILENAME}" | grep -q '/api-docs/amqp'; then
     exit 0
