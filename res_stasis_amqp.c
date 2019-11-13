@@ -1,7 +1,7 @@
 /*
  * Asterisk -- An open source telephony toolkit.
  *
- * Copyright 2013-2017 The Wazo Authors  (see the AUTHORS file)
+ * Copyright 2013-2019 The Wazo Authors  (see the AUTHORS file)
  *
  * David M. Lee, II <dlee@digium.com>
  *
@@ -130,8 +130,6 @@ struct stasis_amqp_global_conf {
 		/*! \brief exchange name */
 		AST_STRING_FIELD(exchange);
 	);
-	/*! \brief current connection to amqp */
-	struct ast_amqp_connection *amqp;
 };
 
 /*! \brief Locking container for safe configuration access. */
@@ -181,7 +179,6 @@ void destroy_app(void *obj)
 static void conf_global_dtor(void *obj)
 {
 	struct stasis_amqp_global_conf *global = obj;
-	ao2_cleanup(global->amqp);
 	ast_string_field_free_memory(global);
 }
 
@@ -244,14 +241,6 @@ static int setup_amqp(void)
 	}
 	if (!conf->global) {
 		ast_log(LOG_ERROR, "Invalid stasis_amqp.conf\n");
-		return -1;
-	}
-	/* Refresh the AMQP connection */
-	ao2_cleanup(conf->global->amqp);
-	conf->global->amqp = ast_amqp_get_connection(conf->global->connection);
-	if (!conf->global->amqp) {
-		ast_log(LOG_ERROR, "Could not get AMQP connection %s\n",
-			conf->global->connection);
 		return -1;
 	}
 	return 0;
@@ -534,9 +523,16 @@ static int publish_to_amqp(const char *topic, const char *name, const struct ast
 
 	conf = ao2_global_obj_ref(confs);
 
-	ast_assert(conf && conf->global && conf->global->amqp);
 
-	res = ast_amqp_basic_publish(conf->global->amqp,
+	ast_assert(conf && conf->global && conf->global->connection);
+
+	struct ast_amqp_connection *amqp = ast_amqp_get_connection(conf->global->connection);
+	if (!amqp) {
+		ast_log(LOG_ERROR, "Failed to get an AMQP connection\n");
+		return -1;
+	}
+
+	res = ast_amqp_basic_publish(amqp,
 		amqp_cstring_bytes(conf->global->exchange),
 		amqp_cstring_bytes(topic),
 		0, /* mandatory; don't return unsendable messages */
@@ -556,7 +552,6 @@ static int publish_to_amqp(const char *topic, const char *name, const struct ast
 static int load_config(int reload)
 {
 	RAII_VAR(struct stasis_amqp_conf *, conf, NULL, ao2_cleanup);
-	RAII_VAR(struct ast_amqp_connection *, amqp, NULL, ao2_cleanup);
 
 	if (aco_info_init(&cfg_info) != 0) {
 		ast_log(LOG_ERROR, "Failed to initialize config\n");
